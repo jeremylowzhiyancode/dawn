@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dawn Snapshot Concepts</title>
+    <style>
+      :root {
+        --ink: #18202a;
+        --muted: #6f7885;
+        --blue: #263f68;
+        --sun: #ff9c45;
+        --amber: #ffbf65;
+        --rose: #d96259;
+        --line: rgba(37, 45, 57, 0.1);
+        --shadow: 0 28px 80px rgba(32, 42, 55, 0.14);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #e8ebef;
+        color: var(--ink);
+      }
+
+      .concept {
+        width: 1440px;
+        height: 900px;
+        margin: 0 auto 64px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .mark {
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        color: white;
+        background: radial-gradient(circle at 35% 30%, #fff2b6 0 11%, #ffad4d 12% 52%, #cf594f 53% 100%);
+        box-shadow: 0 10px 28px rgba(221, 101, 57, 0.28);
+      }
+
+      .tabs {
+        display: inline-flex;
+        padding: 4px;
+        gap: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.9);
+      }
+
+      .tab {
+        border: 0;
+        min-height: 34px;
+        border-radius: 999px;
+        padding: 0 16px;
+        color: #52606e;
+        background: transparent;
+        font-weight: 700;
+      }
+
+      .tab.active {
+        background: #18202a;
+        color: white;
+      }
+
+      .default {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .search {
+        width: 230px;
+        height: 42px;
+        border: 1px solid rgba(34, 43, 54, 0.1);
+        border-radius: 999px;
+        padding: 0 18px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .mic {
+        border: 0;
+        border-radius: 999px;
+        color: white;
+        font-weight: 900;
+        background: linear-gradient(135deg, #ff8c3a, #db5b55);
+        box-shadow: 0 22px 60px rgba(218, 85, 68, 0.32);
+      }
+
+      .sun {
+        width: 42px;
+        height: 42px;
+        position: relative;
+        border-radius: 50%;
+        flex: 0 0 auto;
+        background: radial-gradient(circle at 36% 34%, #fff5c4 0 15%, #ffb552 16% 60%, #e97a48 61% 100%);
+        box-shadow: 0 0 0 8px rgba(255, 166, 74, 0.14), 0 0 34px rgba(255, 155, 68, 0.38);
+      }
+
+      .sun.hazy {
+        background: radial-gradient(circle at 35% 35%, #fff1c7 0 12%, #d3a66d 13% 56%, #8d98a4 57% 100%);
+        box-shadow: 0 0 0 8px rgba(222, 172, 102, 0.12), 0 0 26px rgba(196, 123, 76, 0.24);
+      }
+
+      .sun.critical {
+        background: radial-gradient(circle at 35% 35%, #f5c2a8 0 12%, #a85f58 13% 58%, #4a5360 59% 100%);
+        box-shadow: 0 0 0 8px rgba(169, 76, 67, 0.11), 0 0 30px rgba(180, 75, 65, 0.24);
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #49515c;
+        font-weight: 800;
+        font-size: 12px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      /* Concept A */
+      #concept-a {
+        padding: 42px 52px 54px;
+        background:
+          radial-gradient(circle at 79% 14%, rgba(255, 171, 78, 0.38), transparent 18%),
+          linear-gradient(180deg, #fff7ed 0%, #fbfcfd 45%, #f7f9fb 100%);
+      }
+
+      .a-hero {
+        margin-top: 74px;
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 58px;
+        align-items: end;
+      }
+
+      .a-title {
+        max-width: 570px;
+      }
+
+      .a-title h1 {
+        font-size: 76px;
+        line-height: 0.94;
+        letter-spacing: 0;
+      }
+
+      .a-title p {
+        margin-top: 24px;
+        font-size: 22px;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .a-mic {
+        margin-top: 36px;
+        width: 220px;
+        height: 58px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-size: 17px;
+      }
+
+      .a-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .a-card {
+        min-height: 138px;
+        padding: 22px;
+        border-radius: 30px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.9);
+        box-shadow: var(--shadow);
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .a-card.dim {
+        background: rgba(245, 247, 249, 0.82);
+        box-shadow: 0 18px 44px rgba(32, 42, 55, 0.08);
+      }
+
+      .site h3 {
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .site p {
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .next {
+        display: grid;
+        gap: 8px;
+        text-align: right;
+      }
+
+      .next strong {
+        font-size: 16px;
+      }
+
+      .next span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .a-footer {
+        position: absolute;
+        left: 52px;
+        right: 52px;
+        bottom: 32px;
+        display: flex;
+        justify-content: space-between;
+        color: #8a939f;
+        font-size: 13px;
+      }
+
+      /* Concept B */
+      #concept-b {
+        padding: 42px 54px;
+        background:
+          radial-gradient(circle at 50% 80%, rgba(255, 136, 58, 0.2), transparent 22%),
+          linear-gradient(160deg, #f8fafc 0%, #ffffff 55%, #fff2e3 100%);
+      }
+
+      .b-shell {
+        height: 762px;
+        margin-top: 44px;
+        display: grid;
+        grid-template-columns: 420px 1fr;
+        gap: 32px;
+        align-items: stretch;
+      }
+
+      .b-command {
+        border-radius: 40px;
+        padding: 36px;
+        background: #17202b;
+        color: white;
+        box-shadow: 0 36px 90px rgba(21, 31, 43, 0.24);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .b-command h1 {
+        font-size: 52px;
+        line-height: 0.98;
+      }
+
+      .b-command p {
+        margin-top: 18px;
+        color: rgba(255, 255, 255, 0.66);
+        font-size: 18px;
+        line-height: 1.45;
+      }
+
+      .b-orb {
+        align-self: center;
+        width: 220px;
+        height: 220px;
+        border: 0;
+        border-radius: 50%;
+        color: white;
+        font-size: 20px;
+        font-weight: 900;
+        background:
+          radial-gradient(circle at 42% 30%, rgba(255, 255, 255, 0.9) 0 8%, transparent 9%),
+          radial-gradient(circle at 45% 40%, #ffce79 0 22%, #ff8848 23% 60%, #ce5757 61% 100%);
+        box-shadow: 0 0 0 18px rgba(255, 141, 64, 0.12), 0 40px 90px rgba(239, 104, 64, 0.38);
+      }
+
+      .b-main {
+        border-radius: 40px;
+        padding: 30px;
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.86);
+        box-shadow: var(--shadow);
+      }
+
+      .b-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 34px;
+      }
+
+      .b-head h2 {
+        font-size: 42px;
+      }
+
+      .b-list {
+        display: grid;
+        gap: 16px;
+      }
+
+      .b-row {
+        height: 130px;
+        border-radius: 28px;
+        padding: 22px 24px;
+        display: grid;
+        grid-template-columns: 1fr 210px 130px 58px;
+        gap: 20px;
+        align-items: center;
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.94), rgba(255, 248, 239, 0.78));
+        border: 1px solid rgba(41, 49, 61, 0.08);
+      }
+
+      .b-row.urgent {
+        background: linear-gradient(90deg, rgba(255, 246, 238, 1), rgba(255, 227, 211, 0.84));
+      }
+
+      .b-row h3 {
+        font-size: 26px;
+      }
+
+      .b-row p,
+      .b-meta {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 8px;
+      }
+
+      .b-action {
+        font-weight: 900;
+        color: #202936;
+      }
+
+      /* Concept C */
+      #concept-c {
+        padding: 40px 46px;
+        background:
+          linear-gradient(180deg, #fef8ef 0%, #ffffff 46%, #f4f7fb 100%);
+      }
+
+      .c-horizon {
+        margin-top: 38px;
+        height: 760px;
+        border-radius: 46px;
+        padding: 36px;
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 74% 30%, rgba(255, 167, 72, 0.5), rgba(255, 167, 72, 0.16) 17%, transparent 31%),
+          linear-gradient(180deg, rgba(255, 243, 226, 0.9), rgba(255, 255, 255, 0.82) 52%, rgba(241, 246, 251, 0.96));
+        box-shadow: var(--shadow);
+      }
+
+      .c-content {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 34px;
+        height: 100%;
+      }
+
+      .c-left {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .c-left h1 {
+        max-width: 680px;
+        font-size: 68px;
+        line-height: 0.98;
+      }
+
+      .c-left p {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 20px;
+      }
+
+      .c-rail {
+        margin-top: auto;
+        display: grid;
+        gap: 12px;
+      }
+
+      .c-site {
+        height: 102px;
+        border-radius: 28px;
+        padding: 18px 20px;
+        display: grid;
+        grid-template-columns: 48px 1fr 160px;
+        gap: 16px;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.95);
+      }
+
+      .c-site:first-child {
+        height: 132px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 22px 70px rgba(217, 101, 56, 0.18);
+      }
+
+      .c-site h3 {
+        font-size: 23px;
+      }
+
+      .c-site p {
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .c-panel {
+        border-radius: 36px;
+        padding: 26px;
+        background: rgba(23, 31, 42, 0.92);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .c-panel h2 {
+        font-size: 32px;
+        line-height: 1.05;
+      }
+
+      .c-panel p {
+        margin-top: 12px;
+        color: rgba(255, 255, 255, 0.66);
+        line-height: 1.45;
+      }
+
+      .c-mic {
+        width: 100%;
+        height: 68px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        font-size: 18px;
+      }
+
+      .micro {
+        width: 18px;
+        height: 24px;
+        border: 3px solid currentColor;
+        border-radius: 999px;
+        position: relative;
+      }
+
+      .micro::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -10px;
+        width: 16px;
+        height: 9px;
+        border-bottom: 3px solid currentColor;
+        border-left: 3px solid currentColor;
+        border-right: 3px solid currentColor;
+        border-radius: 0 0 999px 999px;
+        transform: translateX(-50%);
+      }
+    </style>
+  </head>
+  <body>
+    <section class="concept" id="concept-a">
+      <nav class="nav">
+        <div class="brand"><div class="mark">D</div><span>Dawn</span></div>
+        <div class="tabs"><button class="tab active">Snapshot</button><button class="tab">Followup</button></div>
+        <div class="default"><input class="search" value="Search any hospital" /><span>Default view: Snapshot</span></div>
+      </nav>
+      <div class="a-hero">
+        <div class="a-title">
+          <h1>Hospital Activation Made Clear</h1>
+          <p>Dawn listens to messy startup notes and keeps every hospital site moving toward kickoff, pilot, and activation.</p>
+          <button class="mic a-mic"><span class="micro"></span>Ask Dawn</button>
+        </div>
+        <div class="a-grid">
+          <article class="a-card">
+            <div class="sun critical"></div>
+            <div class="site"><h3>Northbridge Hospital</h3><p>Signed EAA · Waiting on us · Latest evidence: CEO voice note today</p></div>
+            <div class="next"><strong>Schedule kickoff now</strong><span>Due today · owner CEO</span><span class="status">Blocked</span></div>
+          </article>
+          <article class="a-card dim">
+            <div class="sun"></div>
+            <div class="site"><h3>MetroCare Site</h3><p>Kickoff scheduled · Latest evidence: email from coordinator</p></div>
+            <div class="next"><strong>Send training deck</strong><span>Tomorrow · owner CEO</span><span class="status">On track</span></div>
+          </article>
+          <article class="a-card dim">
+            <div class="sun hazy"></div>
+            <div class="site"><h3>Riverbend Medical</h3><p>LOI sent · Waiting on hospital · Latest evidence: legal reply</p></div>
+            <div class="next"><strong>Polite reminder</strong><span>This week · owner CEO</span><span class="status">Cooling</span></div>
+          </article>
+        </div>
+      </div>
+      <div class="a-footer"><span>3 sites need attention</span><span>Nothing important slips.</span></div>
+    </section>
+
+    <section class="concept" id="concept-b">
+      <nav class="nav">
+        <div class="brand"><div class="mark">D</div><span>Dawn</span></div>
+        <div class="tabs"><button class="tab active">Snapshot</button><button class="tab">Followup</button></div>
+        <div class="default"><input class="search" value="Find site status" /><span>Default view: Snapshot</span></div>
+      </nav>
+      <div class="b-shell">
+        <aside class="b-command">
+          <div>
+            <h1>A dashboard that listens.</h1>
+            <p>Talk once. Dawn turns messy hospital activation updates into reviewable suggestions.</p>
+          </div>
+          <button class="b-orb">Ask Dawn</button>
+          <p>Snapshot shows only what matters: stage, next step, owner, due date, blocker, and evidence.</p>
+        </aside>
+        <main class="b-main">
+          <div class="b-head"><h2>Snapshot</h2><span class="status">Waiting on us highlighted first</span></div>
+          <div class="b-list">
+            <article class="b-row urgent">
+              <div><h3>Northbridge Hospital</h3><p>Current stage: Signed EAA · Latest evidence: meeting transcript</p></div>
+              <div><div class="b-action">Book kickoff</div><div class="b-meta">CEO · due today</div></div>
+              <span class="status">Waiting on us</span>
+              <div class="sun critical"></div>
+            </article>
+            <article class="b-row">
+              <div><h3>MetroCare Site</h3><p>Current stage: Kickoff scheduled · Latest evidence: email note</p></div>
+              <div><div class="b-action">Send deck</div><div class="b-meta">CEO · tomorrow</div></div>
+              <span class="status">Ready</span>
+              <div class="sun"></div>
+            </article>
+            <article class="b-row">
+              <div><h3>Riverbend Medical</h3><p>Current stage: LOI sent · Latest evidence: WhatsApp note</p></div>
+              <div><div class="b-action">Legal reminder</div><div class="b-meta">CEO · this week</div></div>
+              <span class="status">Waiting</span>
+              <div class="sun hazy"></div>
+            </article>
+            <article class="b-row">
+              <div><h3>Cityview Research</h3><p>Current stage: Pilot initiated · Latest evidence: call note</p></div>
+              <div><div class="b-action">Check feasibility</div><div class="b-meta">CEO · later</div></div>
+              <span class="status">On track</span>
+              <div class="sun"></div>
+            </article>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="concept" id="concept-c">
+      <nav class="nav">
+        <div class="brand"><div class="mark">D</div><span>Dawn</span></div>
+        <div class="tabs"><button class="tab active">Snapshot</button><button class="tab">Followup</button></div>
+        <div class="default"><input class="search" value="Search site" /><span>Default view: Snapshot</span></div>
+      </nav>
+      <div class="c-horizon">
+        <div class="c-content">
+          <div class="c-left">
+            <h1>See which hospital is losing daylight.</h1>
+            <p>One screen. One mic. The few activation steps that cannot slip.</p>
+            <div class="c-rail">
+              <article class="c-site">
+                <div class="sun critical"></div>
+                <div><h3>Northbridge Hospital</h3><p>Signed EAA · no kickoff scheduled · latest evidence: voice note</p></div>
+                <div><strong>Book kickoff</strong><p>Waiting on us · 15 days</p></div>
+              </article>
+              <article class="c-site">
+                <div class="sun"></div>
+                <div><h3>MetroCare Site</h3><p>Kickoff scheduled · latest evidence: coordinator email</p></div>
+                <div><strong>Send deck</strong><p>Tomorrow</p></div>
+              </article>
+              <article class="c-site">
+                <div class="sun hazy"></div>
+                <div><h3>Riverbend Medical</h3><p>LOI sent · latest evidence: legal thread</p></div>
+                <div><strong>Follow up</strong><p>This week</p></div>
+              </article>
+            </div>
+          </div>
+          <aside class="c-panel">
+            <div>
+              <h2>Ask Dawn</h2>
+              <p>Paste notes or talk. Dawn suggests updates, conflicts, dates, and followups for approval.</p>
+            </div>
+            <button class="mic c-mic"><span class="micro"></span>Start voice note</button>
+            <p>Human approval required. Audit trail always saved.</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>
