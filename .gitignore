@@ -2,3 +2,5 @@ tmp/
 .env
 *.log
 node_modules/
+.npm-cache/
+dawn-scaffold/

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f5f9f8"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#172836" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-weight:800;fill:#101417}
+      .text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fill:#101417}
+      .muted{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fill:#66717a}
+      .label{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:14px;font-weight:800;letter-spacing:.25px}
+    </style>
+  </defs>
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <g transform="translate(72 48)">
+    <circle cx="23" cy="23" r="22" fill="#00a651"/>
+    <path d="M15 18h18M15 24h24M15 30h14" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>
+    <text x="60" y="31" class="title" font-size="32">Dawn</text>
+    <rect x="1202" y="0" width="146" height="46" rx="23" fill="#0b3658"/>
+    <circle cx="1230" cy="23" r="9" fill="#fff"/>
+    <text x="1250" y="29" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="16" font-weight="800" fill="#fff">Listening</text>
+  </g>
+
+  <g transform="translate(86 132)">
+    <text x="0" y="0" class="title" font-size="54">Review suggested updates.</text>
+    <text x="2" y="42" class="muted" font-size="22">Dawn listened to messy CEO notes. Nothing changes until you approve.</text>
+  </g>
+
+  <g transform="translate(86 224)" filter="url(#shadow)">
+    <rect width="1268" height="126" rx="34" fill="#ffffff"/>
+    <text x="34" y="42" class="muted" font-size="18">Messy note source</text>
+    <text x="34" y="80" class="text" font-size="24" font-weight="720">\"Riverside signed EAA last Monday but we still have not scheduled kickoff. Northbridge confirmed Aug 12. Harborview legal still reviewing.\"</text>
+  </g>
+
+  <g transform="translate(86 390)">
+    <g filter="url(#shadow)">
+      <rect width="604" height="334" rx="34" fill="#ffffff"/>
+      <rect x="30" y="30" width="132" height="34" rx="17" fill="#ffe4d4"/>
+      <text x="54" y="52" class="label" fill="#b63b27">URGENT</text>
+      <text x="30" y="98" class="title" font-size="30">Riverside General</text>
+      <text x="30" y="132" class="muted" font-size="18">Possible update from CEO note</text>
+      <line x1="30" y1="158" x2="574" y2="158" stroke="#e7edf0" stroke-width="2"/>
+      <text x="30" y="196" class="muted" font-size="17">Stage</text>
+      <text x="190" y="196" class="text" font-size="19" font-weight="760">Signed EAA</text>
+      <text x="30" y="232" class="muted" font-size="17">Waiting on</text>
+      <text x="190" y="232" class="text" font-size="19" font-weight="760">Us</text>
+      <text x="30" y="268" class="muted" font-size="17">Followup</text>
+      <text x="190" y="268" class="text" font-size="19" font-weight="760">Schedule kickoff today</text>
+      <rect x="30" y="292" width="118" height="42" rx="21" fill="#00a651"/>
+      <text x="57" y="319" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="16" font-weight="800" fill="#fff">Approve</text>
+      <rect x="162" y="292" width="86" height="42" rx="21" fill="#eef4f7"/>
+      <text x="189" y="319" class="text" font-size="16" font-weight="800">Edit</text>
+      <rect x="262" y="292" width="108" height="42" rx="21" fill="#fff0ec"/>
+      <text x="290" y="319" class="text" font-size="16" font-weight="800" fill="#a43a2a">Discard</text>
+    </g>
+
+    <g transform="translate(636 0)" filter="url(#shadow)">
+      <rect width="632" height="334" rx="34" fill="#ffffff"/>
+      <rect x="30" y="30" width="112" height="34" rx="17" fill="#e0efff"/>
+      <text x="54" y="52" class="label" fill="#2f5f98">DATE</text>
+      <text x="30" y="98" class="title" font-size="30">Northbridge Medical</text>
+      <text x="30" y="132" class="muted" font-size="18">New kickoff date found</text>
+      <line x1="30" y1="158" x2="602" y2="158" stroke="#e7edf0" stroke-width="2"/>
+      <text x="30" y="196" class="muted" font-size="17">Stage</text>
+      <text x="190" y="196" class="text" font-size="19" font-weight="760">Kickoff scheduled</text>
+      <text x="30" y="232" class="muted" font-size="17">Date</text>
+      <rect x="190" y="210" width="122" height="34" rx="17" fill="#f2f7fa"/>
+      <text x="213" y="233" class="text" font-size="17" font-weight="760">Aug 12</text>
+      <text x="30" y="268" class="muted" font-size="17">Evidence</text>
+      <text x="190" y="268" class="text" font-size="19" font-weight="760">CEO note, today</text>
+      <rect x="30" y="292" width="118" height="42" rx="21" fill="#00a651"/>
+      <text x="57" y="319" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="16" font-weight="800" fill="#fff">Approve</text>
+      <rect x="162" y="292" width="86" height="42" rx="21" fill="#eef4f7"/>
+      <text x="189" y="319" class="text" font-size="16" font-weight="800">Edit</text>
+      <rect x="262" y="292" width="108" height="42" rx="21" fill="#fff0ec"/>
+      <text x="290" y="319" class="text" font-size="16" font-weight="800" fill="#a43a2a">Discard</text>
+    </g>
+  </g>
+
+  <g transform="translate(86 756)" filter="url(#shadow)">
+    <rect width="1268" height="84" rx="28" fill="#101417"/>
+    <text x="34" y="52" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="22" font-weight="760" fill="#fff">2 high-confidence updates ready. 1 item needs a date clarification.</text>
+    <rect x="1032" y="19" width="174" height="46" rx="23" fill="#00a651"/>
+    <text x="1071" y="49" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="16" font-weight="800" fill="#fff">Approve All</text>
+    <rect x="1220" y="19" width="34" height="46" rx="17" fill="#2a3338"/>
+    <path d="M1230 37l7 8 7-8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

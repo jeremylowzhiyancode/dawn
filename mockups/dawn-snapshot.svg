@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.62" stop-color="#f7f9fb"/>
+      <stop offset="1" stop-color="#eef6f3"/>
+    </linearGradient>
+    <linearGradient id="sunriseGood" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#f7fdff"/>
+      <stop offset="0.5" stop-color="#e8f5ff"/>
+      <stop offset="1" stop-color="#fff3d6"/>
+    </linearGradient>
+    <linearGradient id="sunriseWarn" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff9f3"/>
+      <stop offset="0.55" stop-color="#fff0d8"/>
+      <stop offset="1" stop-color="#ffd8c5"/>
+    </linearGradient>
+    <linearGradient id="sunriseCool" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.55" stop-color="#edf3f8"/>
+      <stop offset="1" stop-color="#dfe8ef"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#1b2b3a" flood-opacity="0.11"/>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .title{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-weight:800;fill:#101417}
+      .text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fill:#101417}
+      .muted{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fill:#66717a}
+      .small{font-size:18px}
+      .tiny{font-size:15px}
+      .label{font-size:14px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+      .cardTitle{font-size:26px;font-weight:760}
+      .cardStage{font-size:18px;font-weight:700}
+      .next{font-size:17px;fill:#24303a}
+    </style>
+  </defs>
+  <rect width="1440" height="900" fill="url(#bg)"/>
+
+  <g transform="translate(72 46)">
+    <g>
+      <circle cx="23" cy="23" r="22" fill="#00a651"/>
+      <path d="M16 18h16M16 24h22M16 30h13" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/>
+      <text x="60" y="31" class="title" font-size="32">Dawn</text>
+    </g>
+    <g transform="translate(1030 0)">
+      <rect x="0" y="0" width="178" height="46" rx="23" fill="#eef4f7"/>
+      <text x="22" y="29" class="text" font-size="16" font-weight="700">Default: Snapshot</text>
+    </g>
+    <g transform="translate(1230 0)">
+      <rect x="0" y="0" width="118" height="46" rx="23" fill="#0b3658"/>
+      <circle cx="28" cy="23" r="10" fill="#fff"/>
+      <rect x="24" y="10" width="8" height="20" rx="4" fill="#fff"/>
+      <text x="48" y="29" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" font-size="16" font-weight="800" fill="#fff">Ask Dawn</text>
+    </g>
+  </g>
+
+  <g transform="translate(84 132)">
+    <text x="0" y="0" class="title" font-size="58">Hospital activation made clear.</text>
+    <text x="2" y="42" class="muted" font-size="22">A calm snapshot of who is waiting, what changed, and what must not slip.</text>
+  </g>
+
+  <g transform="translate(84 224)">
+    <g>
+      <rect width="286" height="98" rx="28" fill="#ffffff" filter="url(#shadow)"/>
+      <text x="28" y="38" class="title" font-size="36">2</text>
+      <text x="72" y="39" class="text" font-size="22" font-weight="760">waiting on us</text>
+      <text x="28" y="70" class="muted" font-size="16">Needs action today</text>
+    </g>
+    <g transform="translate(318 0)">
+      <rect width="286" height="98" rx="28" fill="#ffffff" filter="url(#shadow)"/>
+      <text x="28" y="38" class="title" font-size="36">1</text>
+      <text x="72" y="39" class="text" font-size="22" font-weight="760">kickoff due</text>
+      <text x="28" y="70" class="muted" font-size="16">Schedule this week</text>
+    </g>
+    <g transform="translate(636 0)">
+      <rect width="286" height="98" rx="28" fill="#ffffff" filter="url(#shadow)"/>
+      <text x="28" y="38" class="title" font-size="36">3</text>
+      <text x="72" y="39" class="text" font-size="22" font-weight="760">waiting on hospital</text>
+      <text x="28" y="70" class="muted" font-size="16">Softer reminders</text>
+    </g>
+    <g transform="translate(954 0)">
+      <rect width="286" height="98" rx="28" fill="#fff8f5" filter="url(#shadow)"/>
+      <text x="28" y="38" class="title" font-size="36" fill="#c94731">1</text>
+      <text x="72" y="39" class="text" font-size="22" font-weight="760">cold site</text>
+      <text x="28" y="70" class="muted" font-size="16">Momentum fading</text>
+    </g>
+  </g>
+
+  <g transform="translate(84 386)">
+    <text x="0" y="0" class="title" font-size="30">Snapshot</text>
+    <text x="2" y="32" class="muted" font-size="18">Only the hospitals that need clarity.</text>
+  </g>
+
+  <g transform="translate(84 452)">
+    <g filter="url(#shadow)">
+      <rect width="604" height="178" rx="32" fill="url(#sunriseWarn)"/>
+      <path d="M0 130C110 94 215 155 314 121C414 87 503 91 604 62V178H0Z" fill="#fff" opacity=".62"/>
+      <circle cx="493" cy="88" r="44" fill="#ffb05d" filter="url(#softGlow)"/>
+      <path d="M463 87 q30 24 60 0" stroke="#92442f" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <circle cx="478" cy="78" r="4" fill="#92442f"/>
+      <circle cx="509" cy="78" r="4" fill="#92442f"/>
+      <rect x="28" y="28" width="130" height="32" rx="16" fill="#ffe4d4"/>
+      <text x="46" y="50" class="text" font-size="15" font-weight="800" fill="#b63b27">WAITING ON US</text>
+      <text x="28" y="92" class="text cardTitle">Riverside General</text>
+      <text x="28" y="124" class="text cardStage">Signed EAA - waiting 9 days</text>
+      <text x="28" y="154" class="next">Schedule kickoff today</text>
+    </g>
+
+    <g transform="translate(636 0)" filter="url(#shadow)">
+      <rect width="604" height="178" rx="32" fill="url(#sunriseGood)"/>
+      <path d="M0 126C111 109 190 148 292 122C404 93 493 107 604 80V178H0Z" fill="#fff" opacity=".6"/>
+      <circle cx="499" cy="70" r="48" fill="#ffd15c" filter="url(#softGlow)"/>
+      <path d="M472 75 q27 22 54 0" stroke="#7a5a16" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <circle cx="483" cy="62" r="4" fill="#7a5a16"/>
+      <circle cx="514" cy="62" r="4" fill="#7a5a16"/>
+      <rect x="28" y="28" width="118" height="32" rx="16" fill="#dff7e9"/>
+      <text x="47" y="50" class="text" font-size="15" font-weight="800" fill="#007f40">HEALTHY</text>
+      <text x="28" y="92" class="text cardTitle">Northbridge Medical</text>
+      <text x="28" y="124" class="text cardStage">Kickoff scheduled</text>
+      <text x="28" y="154" class="next">Confirm PI attendance - Aug 12</text>
+    </g>
+  </g>
+
+  <g transform="translate(84 656)">
+    <g filter="url(#shadow)">
+      <rect width="604" height="178" rx="32" fill="url(#sunriseCool)"/>
+      <path d="M0 124C97 101 201 138 304 125C419 110 503 111 604 87V178H0Z" fill="#fff" opacity=".58"/>
+      <ellipse cx="491" cy="82" rx="70" ry="34" fill="#d7e1e9" opacity=".86"/>
+      <circle cx="495" cy="95" r="34" fill="#ffd064"/>
+      <rect x="28" y="28" width="172" height="32" rx="16" fill="#e9f0f5"/>
+      <text x="47" y="50" class="text" font-size="15" font-weight="800" fill="#45606f">WAITING ON HOSPITAL</text>
+      <text x="28" y="92" class="text cardTitle">Harborview University</text>
+      <text x="28" y="124" class="text cardStage">LOI sent - waiting 8 days</text>
+      <text x="28" y="154" class="next">Send polite EAA reminder Friday</text>
+    </g>
+
+    <g transform="translate(636 0)" filter="url(#shadow)">
+      <rect width="604" height="178" rx="32" fill="url(#sunriseGood)"/>
+      <path d="M0 132C86 91 172 142 280 109C398 73 493 97 604 58V178H0Z" fill="#fff" opacity=".56"/>
+      <circle cx="500" cy="62" r="55" fill="#ffe07a" filter="url(#softGlow)"/>
+      <path d="M469 66 q31 26 62 0" stroke="#77611c" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <circle cx="482" cy="50" r="4" fill="#77611c"/>
+      <circle cx="518" cy="50" r="4" fill="#77611c"/>
+      <rect x="28" y="28" width="132" height="32" rx="16" fill="#e0efff"/>
+      <text x="48" y="50" class="text" font-size="15" font-weight="800" fill="#245f98">ON PLATFORM</text>
+      <text x="28" y="92" class="text cardTitle">Eastpoint Hospital</text>
+      <text x="28" y="124" class="text cardStage">Pilot completed</text>
+      <text x="28" y="154" class="next">Next: one-month check-in</text>
+    </g>
+  </g>
+</svg>
