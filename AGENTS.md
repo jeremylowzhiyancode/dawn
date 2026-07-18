@@ -1,6 +1,7 @@
-# FlowOn Codex Rules
+# Dawn Codex Rules
 
-- Use `https://github.com/jeremylowzhiyancode/flowon` as the canonical GitHub repository URL for FlowOn.
+- Product name: Dawn.
+- Use `https://github.com/jeremylowzhiyancode/flowon` as the canonical GitHub repository URL for Dawn until the user explicitly renames the GitHub repo.
 - Before major product or implementation decisions, check recent related side chats for updated user answers and constraints.
 - Make periodic Git saves at stable checkpoints.
 - Do not commit unless security checks pass first.
