@@ -3,4 +3,7 @@ tmp/
 *.log
 node_modules/
 .npm-cache/
-dawn-scaffold/
+dawn-scaffold/.next/
+dawn-scaffold/node_modules/
+dawn-scaffold/.env*
+dawn-scaffold/*.log

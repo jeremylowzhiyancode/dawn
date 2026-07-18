@@ -38,6 +38,74 @@
           radial-gradient(circle at 74% 0%, rgba(255, 205, 119, 0.34), transparent 29%),
           radial-gradient(circle at 96% 12%, rgba(255, 114, 86, 0.16), transparent 26%),
           linear-gradient(135deg, #ffe7d4 0%, #fff2df 40%, #fff9ef 72%, #f6fbff 100%);
+        transition: background 420ms ease;
+        --sun-bottom: 38px;
+        --sun-scale: 1;
+        --orbit-x: 10vw;
+        --orbit-y: 42px;
+        --orbit-size: 170px;
+        --orbit-color: rgba(244, 86, 58, 0.7);
+        --orbit-core: rgba(255, 205, 100, 0.98);
+      }
+
+      body[data-stage-tone="interest"] {
+        background:
+          radial-gradient(circle at 48% 108%, rgba(190, 38, 40, 0.72), transparent 31%),
+          radial-gradient(circle at 16% 8%, rgba(228, 74, 52, 0.48), transparent 34%),
+          radial-gradient(circle at 90% 12%, rgba(255, 112, 72, 0.34), transparent 28%),
+          linear-gradient(135deg, #ffc3b3 0%, #ffd7c4 38%, #fff0e3 74%, #f8fbff 100%);
+        --sun-bottom: 10px;
+        --sun-scale: 0.82;
+        --orbit-x: 12vw;
+        --orbit-y: 64px;
+        --orbit-size: 170px;
+        --orbit-color: rgba(203, 36, 39, 0.76);
+        --orbit-core: rgba(255, 118, 74, 0.98);
+      }
+
+      body[data-stage-tone="kickoff"] {
+        background:
+          radial-gradient(circle at 48% 101%, rgba(244, 116, 63, 0.68), transparent 34%),
+          radial-gradient(circle at 18% 8%, rgba(255, 142, 78, 0.42), transparent 32%),
+          radial-gradient(circle at 82% 6%, rgba(255, 196, 96, 0.3), transparent 29%),
+          linear-gradient(135deg, #ffd4bd 0%, #ffe7cf 45%, #fff6e6 78%, #f6fbff 100%);
+        --sun-bottom: 38px;
+        --sun-scale: 1;
+        --orbit-x: 35vw;
+        --orbit-y: 26px;
+        --orbit-size: 182px;
+        --orbit-color: rgba(244, 116, 63, 0.72);
+        --orbit-core: rgba(255, 177, 92, 0.98);
+      }
+
+      body[data-stage-tone="pilot"] {
+        background:
+          radial-gradient(circle at 48% 96%, rgba(255, 157, 65, 0.64), transparent 35%),
+          radial-gradient(circle at 20% 7%, rgba(255, 184, 91, 0.38), transparent 30%),
+          radial-gradient(circle at 74% 0%, rgba(255, 214, 119, 0.48), transparent 31%),
+          linear-gradient(135deg, #ffdfbd 0%, #fff0cd 45%, #fff9dd 78%, #f8fcff 100%);
+        --sun-bottom: 58px;
+        --sun-scale: 1.08;
+        --orbit-x: 62vw;
+        --orbit-y: 24px;
+        --orbit-size: 194px;
+        --orbit-color: rgba(255, 157, 65, 0.72);
+        --orbit-core: rgba(255, 216, 105, 0.98);
+      }
+
+      body[data-stage-tone="active"] {
+        background:
+          radial-gradient(circle at 48% 90%, rgba(255, 199, 64, 0.72), transparent 36%),
+          radial-gradient(circle at 17% 7%, rgba(255, 222, 118, 0.44), transparent 32%),
+          radial-gradient(circle at 76% 0%, rgba(255, 238, 126, 0.58), transparent 32%),
+          linear-gradient(135deg, #ffe9b8 0%, #fff3be 40%, #fffbd7 75%, #fbfeff 100%);
+        --sun-bottom: 78px;
+        --sun-scale: 1.14;
+        --orbit-x: 88vw;
+        --orbit-y: 62px;
+        --orbit-size: 208px;
+        --orbit-color: rgba(255, 199, 64, 0.76);
+        --orbit-core: rgba(255, 243, 128, 0.98);
       }
 
       button,
@@ -59,14 +127,24 @@
         content: "";
         position: absolute;
         left: 50%;
-        bottom: 38px;
+        bottom: var(--sun-bottom);
         width: min(420px, 42vw);
         aspect-ratio: 1;
         border-radius: 50%;
-        transform: translateX(-50%);
+        transform: translateX(-50%) scale(var(--sun-scale));
         background:
           radial-gradient(circle at 48% 42%, rgba(255, 246, 205, 0.96) 0 18%, transparent 19%),
           radial-gradient(circle, rgba(255, 181, 77, 0.72) 0 46%, rgba(244, 116, 63, 0.34) 47% 70%, transparent 71%);
+        opacity: 1;
+        transition:
+          bottom 420ms ease,
+          transform 420ms ease,
+          opacity 420ms ease;
+      }
+
+      body:not([data-stage-tone]) .sunrise::before,
+      body[data-stage-tone=""] .sunrise::before {
+        opacity: 0;
       }
 
       .sunrise::after {
@@ -78,6 +156,35 @@
           radial-gradient(78% 100% at 18% 100%, #dbe6e0 0 44%, transparent 45%),
           radial-gradient(78% 100% at 78% 100%, #cbd9d5 0 48%, transparent 49%),
           linear-gradient(180deg, transparent 0, rgba(239, 244, 242, 0.9) 64%, #eef3f2 100%);
+      }
+
+      .orbit-sun {
+        position: fixed;
+        z-index: -1;
+        left: var(--orbit-x);
+        top: var(--orbit-y);
+        width: var(--orbit-size);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 42% 36%, rgba(255, 255, 225, 0.9) 0 10%, transparent 11%),
+          radial-gradient(circle, var(--orbit-core) 0 34%, var(--orbit-color) 35% 62%, transparent 63%);
+        box-shadow: 0 0 90px var(--orbit-color);
+        transform: translate(-50%, -50%);
+        opacity: 0.72;
+        transition:
+          left 760ms cubic-bezier(0.22, 1, 0.36, 1),
+          top 760ms cubic-bezier(0.22, 1, 0.36, 1),
+          width 760ms cubic-bezier(0.22, 1, 0.36, 1),
+          background 520ms ease,
+          box-shadow 520ms ease,
+          opacity 520ms ease;
+      }
+
+      body:not([data-stage-tone]) .orbit-sun,
+      body[data-stage-tone=""] .orbit-sun {
+        opacity: 0;
       }
 
       .app {
@@ -219,18 +326,27 @@
       }
 
       .add-hospital {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         border: 0;
         border-radius: 999px;
-        padding: 12px 16px;
+        width: 44px;
+        height: 44px;
+        padding: 0;
         color: white;
         background: linear-gradient(145deg, var(--orange), var(--orange-2));
         box-shadow: 0 14px 28px rgba(223, 87, 55, 0.24);
-        font-size: 12px;
+        font-size: 22px;
+        line-height: 1;
         font-weight: 900;
         cursor: pointer;
       }
 
       .search-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
         margin-bottom: 12px;
       }
 
@@ -364,6 +480,10 @@
         margin: 4px 0;
       }
 
+      .tooltip strong {
+        font-weight: 900;
+      }
+
       .flow {
         display: flex;
         align-items: center;
@@ -415,7 +535,7 @@
         border-radius: 50%;
         overflow: hidden;
         background:
-          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(18, 23, 34, 0.82) 16px 18px, transparent 18px 22px),
+          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(24, 59, 95, 0.84) 16px 18px, transparent 18px 22px),
           linear-gradient(180deg, #fff27a 0%, #ffae43 42%, var(--orange) 70%, #ea3e6d 100%);
         box-shadow:
           inset 0 -8px 0 rgba(0, 0, 0, 0.08),
@@ -429,32 +549,32 @@
         right: 0;
         top: 15px;
         height: 3px;
-        background: rgba(18, 23, 34, 0.82);
-        box-shadow: 0 6px 0 rgba(18, 23, 34, 0.58), 0 12px 0 rgba(18, 23, 34, 0.32);
+        background: rgba(24, 59, 95, 0.84);
+        box-shadow: 0 6px 0 rgba(24, 59, 95, 0.62), 0 12px 0 rgba(24, 59, 95, 0.36);
       }
 
       .signal.critical {
         background:
-          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(9, 15, 27, 0.88) 16px 18px, transparent 18px 22px),
+          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(12, 33, 62, 0.9) 16px 18px, transparent 18px 22px),
           linear-gradient(180deg, #31405c 0%, #1d2a40 48%, #0f1728 100%);
         box-shadow: 0 7px 16px rgba(24, 37, 62, 0.18);
       }
 
       .signal.watch {
         background:
-          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(42, 48, 64, 0.78) 16px 18px, transparent 18px 22px),
+          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(24, 59, 95, 0.78) 16px 18px, transparent 18px 22px),
           linear-gradient(180deg, #ffd163 0%, #f4743f 52%, #556276 100%);
       }
 
       .signal.warm {
         background:
-          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(52, 38, 38, 0.68) 16px 18px, transparent 18px 22px),
+          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(24, 59, 95, 0.66) 16px 18px, transparent 18px 22px),
           linear-gradient(180deg, #fff47d 0%, #ffb45d 42%, #f4743f 76%, #e86d8a 100%);
       }
 
       .signal.hot {
         background:
-          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(70, 42, 26, 0.58) 16px 18px, transparent 18px 22px),
+          repeating-linear-gradient(to bottom, transparent 0 16px, rgba(24, 59, 95, 0.58) 16px 18px, transparent 18px 22px),
           linear-gradient(180deg, #fff575 0%, #ffc64c 44%, #ff7a3d 76%, #f15565 100%);
       }
 
@@ -466,7 +586,10 @@
         letter-spacing: -0.01em;
       }
 
-      .hospital span,
+      .hospital span {
+        display: none;
+      }
+
       .cell span {
         display: block;
         margin-top: 3px;
@@ -708,10 +831,10 @@
       }
 
       .parse-card {
-        width: min(640px, calc(100vw - 42px));
+        width: min(720px, calc(100vw - 42px));
         border: 1px solid rgba(255, 255, 255, 0.78);
         border-radius: 30px;
-        padding: 22px;
+        padding: 18px;
         background: rgba(255, 255, 255, 0.96);
         box-shadow: 0 34px 90px rgba(18, 23, 34, 0.24);
         transform: translateY(0) scale(1);
@@ -725,13 +848,13 @@
         align-items: start;
         justify-content: space-between;
         gap: 18px;
-        margin-bottom: 18px;
+        margin-bottom: 12px;
       }
 
       .parse-head h2 {
         margin: 0 0 7px;
         color: var(--ink);
-        font-size: 25px;
+        font-size: 20px;
         line-height: 1;
         letter-spacing: -0.035em;
       }
@@ -739,29 +862,31 @@
       .parse-head p {
         margin: 0;
         color: var(--muted);
-        font-size: 13px;
+        font-size: 12px;
         line-height: 1.4;
       }
 
       .suggestion-list {
         display: grid;
-        gap: 10px;
+        gap: 8px;
+        max-height: 360px;
+        overflow: auto;
       }
 
       .suggestion {
         display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 14px;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
         border: 1px solid rgba(18, 23, 34, 0.09);
-        border-radius: 18px;
-        padding: 14px;
+        border-radius: 15px;
+        padding: 10px 11px;
         background: rgba(18, 23, 34, 0.035);
       }
 
       .suggestion strong {
         display: block;
         color: var(--ink);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 900;
       }
 
@@ -769,7 +894,7 @@
         display: block;
         margin-top: 4px;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 11px;
       }
 
       .suggestion-actions {
@@ -782,10 +907,10 @@
       .modal-close {
         border: 0;
         border-radius: 999px;
-        padding: 9px 12px;
+        padding: 8px 10px;
         color: #344052;
         background: rgba(18, 23, 34, 0.08);
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 900;
         cursor: pointer;
       }
@@ -1060,12 +1185,13 @@
   </head>
   <body>
     <div class="sunrise" aria-hidden="true"></div>
+    <div class="orbit-sun" aria-hidden="true"></div>
 
     <main class="app">
       <header class="topbar">
         <div class="brand">
           <span class="mark" aria-hidden="true"></span>
-          <span>Dawn</span>
+          <span>Dawn AI</span>
         </div>
 
         <div class="top-actions">
@@ -1081,20 +1207,23 @@
               <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.05.05a2.2 2.2 0 0 1-3.1 3.1l-.05-.05a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21.5a2.2 2.2 0 0 1-4.4 0v-.13a1.8 1.8 0 0 0-1.08-1.65 1.8 1.8 0 0 0-1.98.36l-.05.05a2.2 2.2 0 0 1-3.1-3.1l.05-.05A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.65-1.08H2.8a2.2 2.2 0 0 1 0-4.4h.13A1.8 1.8 0 0 0 4.6 8a1.8 1.8 0 0 0-.36-1.98l-.05-.05a2.2 2.2 0 0 1 3.1-3.1l.05.05A1.8 1.8 0 0 0 9.32 3.3 1.8 1.8 0 0 0 10.4 1.65V1.5a2.2 2.2 0 0 1 4.4 0v.13A1.8 1.8 0 0 0 15.88 3.3a1.8 1.8 0 0 0 1.98-.36l.05-.05a2.2 2.2 0 0 1 3.1 3.1l-.05.05A1.8 1.8 0 0 0 19.4 8c.2.74.86 1.27 1.65 1.27h.15a2.2 2.2 0 0 1 0 4.4h-.15A1.8 1.8 0 0 0 19.4 15Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round" />
             </svg>
           </button>
-          <button class="ghost-button export-button" id="exportButton">
+          <button class="ghost-button icon-top-button export-button" id="exportButton" aria-label="Export to Excel">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 3v12M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
               <path d="M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
             </svg>
-            Export
           </button>
-          <button class="ghost-button">
+          <button class="ghost-button icon-top-button" aria-label="Invite user">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M22 11h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
             </svg>
-            Invite user
           </button>
-          <button class="solid-button">Logout</button>
+          <button class="solid-button icon-top-button" aria-label="Logout">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M10 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              <path d="M15 12H4M8 8l-4 4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -1102,13 +1231,17 @@
         <section class="snapshot" aria-label="Hospital snapshot">
           <div class="section-head">
             <div class="title">
-              <h1>Let’s keep it going</h1>
+              <h1 id="welcomeLine">Let's keep it going</h1>
             </div>
-            <button class="add-hospital">+ Add hospital</button>
           </div>
 
           <div class="search-row">
             <input class="search" id="search" aria-label="Search hospital" placeholder="Search hospital, stage, awaiting..." />
+            <button class="add-hospital" aria-label="New hospital">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+              </svg>
+            </button>
           </div>
 
           <nav class="stage-tabs" aria-label="Activation stage">
@@ -1137,10 +1270,10 @@
                 <span class="tooltip">
                   <div class="flow"><span>Interest</span><i></i><span>Kickoff</span><i></i><span>Pilot</span><i></i><span>Active</span></div>
                   <ol>
-                    <li>Interest: lead, LOI, EAA, legal.</li>
-                    <li>Kickoff: invited, scheduled, completed.</li>
-                    <li>Pilot: first feasibility in progress.</li>
-                    <li>Active: pilot complete and check-ins.</li>
+                    <li><strong>Interest:</strong> agreements sent, EAA signed, LOI signed.</li>
+                    <li><strong>Kickoff:</strong> invited, scheduled, completed.</li>
+                    <li><strong>Pilot:</strong> feasibility started, submitted, completed.</li>
+                    <li><strong>Active:</strong> pilot complete, check-ins, usage requests.</li>
                   </ol>
                 </span>
               </div>
@@ -1152,16 +1285,16 @@
             <article class="hospital-row cold" data-page="1" data-stage="Kickoff" data-search="northbridge hospital kickoff signed eaa waiting on us no kickoff ceo voice note today">
               <div class="signal critical" aria-label="Critical cooling"></div>
               <div class="hospital"><strong>Northbridge Hospital</strong><span>Signed EAA - 15 days</span></div>
-              <div class="cell"><b>Kickoff needed</b><span>Interest done</span></div>
+              <div class="cell"><b>EAA signed</b><span>Interest</span></div>
               <div class="cell"><b>Book kickoff</b></div>
-              <div class="cell"><b>Today</b><span>CEO note</span></div>
+              <div class="cell"><b>Today</b><span>Customer call</span></div>
               <div class="pill us">Us</div>
             </article>
 
-            <article class="hospital-row cold" data-page="1" data-stage="Interest" data-search="riverbend medical loi legal reminder waiting hospital legal thread">
+            <article class="hospital-row cold" data-page="1" data-stage="Interest" data-search="riverbend medical loi eaa reminder waiting hospital email thread">
               <div class="signal watch" aria-label="Cooling"></div>
               <div class="hospital"><strong>Riverbend Medical</strong><span>LOI - 12 days</span></div>
-              <div class="cell"><b>Legal</b><span>Interest</span></div>
+              <div class="cell"><b>LOI signed</b><span>Interest</span></div>
               <div class="cell"><b>Send reminder</b></div>
               <div class="cell"><b>12d ago</b><span>Email</span></div>
               <div class="pill hospital">Hospital</div>
@@ -1185,11 +1318,11 @@
               <div class="pill us">Us</div>
             </article>
 
-            <article class="hospital-row" data-page="1" data-stage="Interest" data-search="harborview clinic eaa sent legal waiting hospital">
+            <article class="hospital-row" data-page="1" data-stage="Interest" data-search="harborview clinic eaa sent waiting hospital">
               <div class="signal warm" aria-label="Warm"></div>
               <div class="hospital"><strong>Harborview Clinic</strong><span>EAA sent - 4 days</span></div>
               <div class="cell"><b>Interest</b><span>EAA review</span></div>
-              <div class="cell"><b>Wait legal</b></div>
+              <div class="cell"><b>Wait EAA</b></div>
               <div class="cell"><b>4d ago</b><span>Email</span></div>
               <div class="pill hospital">Hospital</div>
             </article>
@@ -1199,7 +1332,7 @@
               <div class="hospital"><strong>Lakeside Health</strong><span>PDF feasibility</span></div>
               <div class="cell"><b>Pilot</b><span>Feasibility</span></div>
               <div class="cell"><b>Review form</b></div>
-              <div class="cell"><b>3d ago</b><span>Upload</span></div>
+              <div class="cell"><b>3d ago</b><span>Pilot review</span></div>
               <div class="pill us">Us</div>
             </article>
 
@@ -1226,7 +1359,7 @@
               <div class="hospital"><strong>Eastpoint Research</strong><span>Pilot completed</span></div>
               <div class="cell"><b>Completed</b><span>Pilot</span></div>
               <div class="cell"><b>Check-in</b></div>
-              <div class="cell"><b>Last week</b><span>Form</span></div>
+              <div class="cell"><b>Last week</b><span>Pilot submitted</span></div>
               <div class="pill none">None</div>
             </article>
 
@@ -1239,7 +1372,7 @@
               <div class="pill none">None</div>
             </article>
 
-            <article class="hospital-row cold" data-page="2" data-stage="Interest" data-search="pinecrest health eaa review waiting on us draft agreement">
+            <article class="hospital-row cold" data-page="2" data-stage="Interest" data-search="pinecrest health eaa review waiting on us draft interest">
               <div class="signal critical" aria-label="Critical cooling"></div>
               <div class="hospital"><strong>Pinecrest Health</strong><span>EAA draft - 18 days</span></div>
               <div class="cell"><b>Interest</b><span>EAA draft</span></div>
@@ -1262,7 +1395,7 @@
               <div class="hospital"><strong>Cedar Point Clinic</strong><span>Active - check-in</span></div>
               <div class="cell"><b>Active</b><span>1 mo</span></div>
               <div class="cell"><b>Log bug request</b></div>
-              <div class="cell"><b>5d ago</b><span>Note</span></div>
+              <div class="cell"><b>5d ago</b><span>Check-in</span></div>
               <div class="pill us">Us</div>
             </article>
 
@@ -1280,7 +1413,7 @@
               <div class="hospital"><strong>Orchard Medical</strong><span>Pilot initiated</span></div>
               <div class="cell"><b>Pilot</b><span>Training</span></div>
               <div class="cell"><b>Send walkthrough</b></div>
-              <div class="cell"><b>4d ago</b><span>Transcript</span></div>
+              <div class="cell"><b>4d ago</b><span>Training call</span></div>
               <div class="pill us">Us</div>
             </article>
 
@@ -1338,9 +1471,6 @@
 
         <aside class="right-panel" aria-label="Custom notes">
           <section class="rail-card note-card">
-            <div class="rail-head">
-              <h2>To-do</h2>
-            </div>
             <div class="note-toolbar" aria-label="Note formatting">
               <button class="note-tool" type="button">B</button>
               <button class="note-tool" type="button">I</button>
@@ -1349,13 +1479,19 @@
                   <path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
+              <button class="note-tool" type="button" aria-label="Bullets">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M9 7h10M9 12h10M9 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <path d="M5 7h.01M5 12h.01M5 17h.01" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                </svg>
+              </button>
             </div>
-            <div class="todo-note" contenteditable="true" aria-label="Custom to-do note">
+            <div class="todo-note" contenteditable="true" aria-label="Custom note">
               <strong>Today</strong>
               <ul>
                 <li><button class="priority high" type="button" aria-label="High priority"></button><input type="checkbox" />Call Northbridge to book kickoff.</li>
                 <li><button class="priority medium" type="button" aria-label="Medium priority"></button><input type="checkbox" />Send MetroCare kickoff deck.</li>
-                <li><button class="priority low" type="button" aria-label="Low priority"></button><input type="checkbox" />Ask Riverbend legal for EAA timing.</li>
+                <li><button class="priority low" type="button" aria-label="Low priority"></button><input type="checkbox" />Ask Riverbend for EAA timing.</li>
               </ul>
               <p>Drop scrappy reminders here. Dawn can turn them into structured followups later.</p>
             </div>
@@ -1388,8 +1524,8 @@
         <div class="parse-card">
           <div class="parse-head">
             <div>
-              <h2>Dawn found suggested changes</h2>
-              <p>Review before anything updates. Dawn never changes hospital records without approval.</p>
+              <h2>Dawn AI found 5 suggested changes</h2>
+              <p>Review, edit, or dismiss. Nothing updates without approval.</p>
             </div>
             <button class="modal-close" id="closeParse" type="button">Close</button>
           </div>
@@ -1398,7 +1534,7 @@
             <article class="suggestion">
               <div>
                 <strong>Northbridge Hospital</strong>
-                <span>Stage: Signed EAA -> Kickoff needed</span>
+                <span>Stage: Interest -> EAA signed</span>
               </div>
               <div class="suggestion-actions">
                 <button class="accept" type="button">Accept</button>
@@ -1410,6 +1546,39 @@
               <div>
                 <strong>Followup</strong>
                 <span>Book kickoff. Last interaction: today. Awaiting: us.</span>
+              </div>
+              <div class="suggestion-actions">
+                <button class="accept" type="button">Accept</button>
+                <button type="button">Edit</button>
+                <button type="button">Dismiss</button>
+              </div>
+            </article>
+            <article class="suggestion">
+              <div>
+                <strong>MetroCare Site</strong>
+                <span>Next step: send kickoff deck. Last interaction: email yesterday.</span>
+              </div>
+              <div class="suggestion-actions">
+                <button class="accept" type="button">Accept</button>
+                <button type="button">Edit</button>
+                <button type="button">Dismiss</button>
+              </div>
+            </article>
+            <article class="suggestion">
+              <div>
+                <strong>Riverbend Medical</strong>
+                <span>Stage: Interest. Add EAA reminder followup for today.</span>
+              </div>
+              <div class="suggestion-actions">
+                <button class="accept" type="button">Accept</button>
+                <button type="button">Edit</button>
+                <button type="button">Dismiss</button>
+              </div>
+            </article>
+            <article class="suggestion">
+              <div>
+                <strong>Duplicate check</strong>
+                <span>No existing kickoff date found for Northbridge.</span>
               </div>
               <div class="suggestion-actions">
                 <button class="accept" type="button">Accept</button>
@@ -1432,7 +1601,7 @@
             <path d="m21 12.2-8.8 8.5a5.2 5.2 0 0 1-7.3-7.4l9.2-8.9a3.45 3.45 0 0 1 4.8 5l-9.1 8.7a1.75 1.75 0 0 1-2.4-2.5l8.5-8.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
-        <input id="composerInput" placeholder="drop a file, type your notes or talk to Dawn for help" />
+        <input id="composerInput" placeholder="How can Dawn help you today?" />
         <button class="mic" type="button" aria-label="Voice note">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
             <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="2" />
@@ -1461,6 +1630,14 @@
       const priorityButtons = document.querySelectorAll(".priority");
       const pageButtons = document.querySelectorAll("[data-page-button]");
       const exportButton = document.getElementById("exportButton");
+      const welcomeLine = document.getElementById("welcomeLine");
+      const welcomeMessages = [
+        "Let's keep it going",
+        "Welcome back",
+        "What needs moving today?",
+        "Keep every site warm",
+        "One step closer today"
+      ];
       let activeStage = "all";
       let activePage = "1";
 
@@ -1479,6 +1656,10 @@
 
       }
 
+      function setStageTone() {
+        document.body.dataset.stageTone = activeStage === "all" ? "" : activeStage.toLowerCase();
+      }
+
       tabs.forEach((tab) => {
         tab.addEventListener("click", () => {
           activeStage = tab.dataset.filter;
@@ -1486,7 +1667,8 @@
           tab.classList.add("is-active");
           activePage = "1";
           pageButtons.forEach((button) => button.classList.toggle("active", button.dataset.pageButton === activePage));
-          applyFilters();
+          setStageTone();
+          window.setTimeout(applyFilters, 90);
         });
       });
 
@@ -1543,6 +1725,8 @@
         link.click();
         URL.revokeObjectURL(link.href);
       }
+      welcomeLine.textContent = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+      setStageTone();
       applyFilters();
     </script>
   </body>
