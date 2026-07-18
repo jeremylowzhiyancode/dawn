@@ -1,4 +1,4 @@
-# Dawn Devpost Pain Point
+# Dawn: Hospital Activation Made Clear
 
 Hospitals are hard to activate. They are busy, bureaucratic, and full of decision makers. Updates arrive slowly and everywhere: email, WhatsApp, Excel, call notes, conference conversations, voice memos, and memory.
 

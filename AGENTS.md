@@ -1,7 +1,8 @@
 # Dawn Codex Rules
 
 - Product name: Dawn.
-- Use `https://github.com/jeremylowzhiyancode/flowon` as the canonical GitHub repository URL for Dawn until the user explicitly renames the GitHub repo.
+- Use `https://github.com/jeremylowzhiyancode/dawn` as the canonical GitHub repository URL for Dawn.
+- Default marketing line: Dawn: Hospital Activation Made Clear.
 - Product/design north star: Dawn must be easy enough that any kid could use it, polished enough that a CEO trusts it, and beautiful enough that a busy lean team wants to come back.
 - Keep Dawn idiotproof first: no complicated setup, no dense menus, no hidden important actions.
 - Max clarity: every screen answers one question only.
@@ -10,6 +11,12 @@
 - Make it reusable and inviting, not admin homework.
 - Sunrise visuals must communicate hospital activation progress, not act as decoration.
 - Design specifically for a busy, lean startup team with very limited time and resources.
+- Worst-case scenario to prevent: a hospital signs off or agrees to move forward, then waits months for kickoff because the startup forgot or lost the thread.
+- Status must distinguish "waiting on us" from "waiting on hospital"; "waiting on us" is the critical failure mode.
+- Phase 1 inputs are voice notes, messy written notes, and email notes; file upload is secondary.
+- AI must suggest changes only. A human must be able to accept, edit, or discard every suggestion before records change.
+- Default post-login view is Snapshot, with a simple top-right Default view selector for Snapshot or Followup.
+- Use simple demo login for MVP and record the demo user in audit trails.
 - Before major product or implementation decisions, check recent related side chats for updated user answers and constraints.
 - Make periodic Git saves at stable checkpoints.
 - Do not commit unless security checks pass first.
