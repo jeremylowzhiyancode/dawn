@@ -2,6 +2,14 @@
 
 - Product name: Dawn.
 - Use `https://github.com/jeremylowzhiyancode/flowon` as the canonical GitHub repository URL for Dawn until the user explicitly renames the GitHub repo.
+- Product/design north star: Dawn must be easy enough that any kid could use it, polished enough that a CEO trusts it, and beautiful enough that a busy lean team wants to come back.
+- Keep Dawn idiotproof first: no complicated setup, no dense menus, no hidden important actions.
+- Max clarity: every screen answers one question only.
+- Dawn-themed UI: warm sunrise progress, soft morning gradients, clean white space, and bright but calm energy.
+- Busy-team friendly interactions: one-click mic, max-two-click edits, tiny priority list, and an obvious next action.
+- Make it reusable and inviting, not admin homework.
+- Sunrise visuals must communicate hospital activation progress, not act as decoration.
+- Design specifically for a busy, lean startup team with very limited time and resources.
 - Before major product or implementation decisions, check recent related side chats for updated user answers and constraints.
 - Make periodic Git saves at stable checkpoints.
 - Do not commit unless security checks pass first.
