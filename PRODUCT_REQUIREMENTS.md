@@ -8,6 +8,10 @@ Default marketing line: **Dawn: Hospital Activation Made Clear**.
 
 Core promise: nothing important slips. The nightmare scenario Dawn prevents is a hospital agreeing to sign off, then waiting months for kickoff because the startup forgot, lost the thread, or missed the next activation step.
 
+Main users are the CEO and one internal support user. The current source of truth is CEO memory, email, messy WhatsApp-style notes, and verbal chat notes.
+
+Activation success means pilot completed. The real failure is a hospital churning, losing interest, or never using the platform.
+
 ## Phase 1 Workflow
 
 - Primary input: messy CEO notes, especially real mic-recorded voice notes.
@@ -23,14 +27,24 @@ Core promise: nothing important slips. The nightmare scenario Dawn prevents is a
 - Add undo for any approval.
 - If a new suggestion conflicts with existing data, Dawn flags the conflict and asks the user to confirm replacement.
 - If a date is uncertain or relative, Dawn asks a clarifying question or shows an easy date picker. Keep source date, event date, due date, and approval timestamp conceptually distinct.
+- The demo-winning moment is: paste/drop messy notes from a document or conversation, Dawn parses recommended updates, the user accepts/edits/discards them, and the system updates with audit trail.
+- Dawn must never ask the CEO to fill forms or manually enter structured data.
 
 ## Core Views
 
 - **Snapshot** is the default landing page after login and answers: where are we?
 - **Followup** is the practical action queue and answers: what cannot slip?
 - Add a simple top-right default view selector: Snapshot or Followup. Do not build a complex settings page.
+- Add fast, clean search to find any organization and current status.
+- Filters should feel zero-load and smooth, not like a heavy admin table.
 
 Followup shows who needs emailing, what documents need sending, what kickoff needs scheduling, who has waited too long, and what next action cannot slip.
+
+Use these 8 visible fields: hospital, current stage, next step, owner, due date, relationship/sun signal, blocker, latest evidence.
+
+Keep hidden timestamps/history for waiting-since, stage changed date, approval timestamp, source date, event date, and due date.
+
+Snapshot should immediately highlight hospitals already on the platform.
 
 ## Healthcare-Specific Requirements
 
@@ -43,6 +57,9 @@ Followup shows who needs emailing, what documents need sending, what kickoff nee
 - Preserve evidence trails for messy inputs, suggested updates, human approvals, and audit history.
 - Keep post-pilot check-ins visible without making the product feel like project-management theatre.
 - CEO owns hospital communications, emails, and meeting scheduling for MVP. Do not over-model other internal roles.
+- Track what emails/documents have been sent, what has not been sent, which kickoff meetings need arranging, and what has already been completed.
+- Anyone internal can approve suggestions for MVP.
+- Explore weekly change summaries, such as "2 newly activated compared to last week" or "2 new issues".
 
 ## Stage Timing
 
@@ -68,4 +85,16 @@ Use purely date-based warmth/cooling for MVP. Do not use sentiment analysis yet;
 ## Demo And QA Notes
 
 - Browser/Chrome testing is for QA and demo polish only: page loads, buttons work, UI fits, no overlaps, no console errors, responsive layout, and clean screenshots.
+- Use both Browser/Chrome and Playwright for QA when available. Use Playwright for repeatable flows and screenshots; use Browser/Chrome for human-like visual/design review.
 - Demo data must be anonymous and must not include company names, patient data, vendor data, or identifying hospital/customer names.
+
+## No-Build List
+
+- No full CRM.
+- No full email sync.
+- No calendar integration.
+- No team chat.
+- No full permissions system.
+- No custom analytics suite.
+- No patient data.
+- No unnecessary dashboards, widgets, charts, or tables that do not directly prevent missed activation followups.
