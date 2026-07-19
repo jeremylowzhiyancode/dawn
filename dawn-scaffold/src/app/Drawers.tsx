@@ -4,6 +4,15 @@ import { useState } from "react";
 import type { Awaiting, Contact, ContactTitle, DawnSettings, Hospital, Stage, StoredFile } from "./DawnApp";
 import { contactTitles, nextStepOptions, stages } from "./DawnApp";
 
+function singaporeDateInputValue() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 function nextStepsFor(stage: Stage, substage: string) {
   const nextStepBySubstage: Record<string, string> = {
     "Interest:Agreements sent": "Send polite reminder",
@@ -49,7 +58,7 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
   const [isAddingInteraction, setAddingInteraction] = useState(false);
   const [interactionText, setInteractionText] = useState("");
   const [interactionTitle, setInteractionTitle] = useState("");
-  const [interactionDate, setInteractionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [interactionDate, setInteractionDate] = useState(singaporeDateInputValue);
   const [expandedInteractionId, setExpandedInteractionId] = useState<string | null>(null);
 
   function updateDraft(updater: (current: Hospital) => Hospital) {
@@ -180,7 +189,7 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
       </div>
 
       {activeTab === "details" ? <>
-      <section className="form-section">
+      <section className="form-section compact-form-section" aria-label="Hospital fields">
         <label>
           <span>Stage</span>
           <select value={draft.stage} onChange={(event) => updateStage(event.target.value as Stage)}>
@@ -228,7 +237,7 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
             ))}
           </select>
         </label>
-        <label>
+        <label className="wide-field">
           <span>Notes</span>
           <textarea value={draft.notes} onChange={(event) => updateField("notes", event.target.value)} />
         </label>
@@ -269,9 +278,6 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
       </> : null}
 
       {activeTab === "contacts" ? <section className="form-section">
-        <div className="section-title-row">
-          <button className="mini-action plus-action" type="button" aria-label="Add contact" title="Add contact" onClick={addContact}>+</button>
-        </div>
         {draft.contacts.map((contact) => (
           <div className="contact-card" key={contact.id}>
             <div className="contact-summary">
@@ -281,8 +287,8 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
               </button>
             </div>
             {expandedContactId === contact.id ? (
-              <div className="contact-details">
-                <label>
+              <div className="contact-details compact-contact-fields">
+                <label className="wide-field">
                   <span>Email</span>
                   <input type="email" value={contact.email} onChange={(event) => updateContact(contact.id, "email", event.target.value)} />
                 </label>
@@ -303,6 +309,9 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
             ) : null}
           </div>
         ))}
+        <div className="section-title-row contact-add-row">
+          <button className="mini-action plus-action" type="button" aria-label="Add contact" title="Add contact" onClick={addContact}>+</button>
+        </div>
       </section> : null}
 
       {activeTab === "activity" ? <section>
@@ -503,7 +512,7 @@ export function NewHospitalDrawer({ onCreate, substageOptions }: { onCreate: (ho
   const [isAddingInteraction, setAddingInteraction] = useState(false);
   const [interactionText, setInteractionText] = useState("");
   const [interactionTitle, setInteractionTitle] = useState("");
-  const [interactionDate, setInteractionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [interactionDate, setInteractionDate] = useState(singaporeDateInputValue);
 
   function updateField<K extends keyof Hospital>(field: K, value: Hospital[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -655,9 +664,6 @@ export function NewHospitalDrawer({ onCreate, substageOptions }: { onCreate: (ho
       </section> : null}
 
       {activeTab === "contacts" ? <section className="form-section">
-        <div className="section-title-row">
-          <button className="mini-action plus-action" type="button" aria-label="Add contact" title="Add contact" onClick={addContact}>+</button>
-        </div>
         {draft.contacts.map((contact) => (
           <div className="contact-card" key={contact.id}>
             <div className="contact-summary">
@@ -671,6 +677,9 @@ export function NewHospitalDrawer({ onCreate, substageOptions }: { onCreate: (ho
             </div> : null}
           </div>
         ))}
+        <div className="section-title-row contact-add-row">
+          <button className="mini-action plus-action" type="button" aria-label="Add contact" title="Add contact" onClick={addContact}>+</button>
+        </div>
       </section> : null}
 
       <div className="sticky-save">

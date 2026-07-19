@@ -119,18 +119,24 @@ type Suggestion = {
   id: string;
   hospitalId: string;
   hospitalName: string;
-  field: "stage" | "nextStep" | "lastInteraction" | "awaiting" | "notes";
+  field: "stage" | "nextStep" | "lastInteraction" | "awaiting" | "notes" | "newHospital" | "newContact" | "contactUpdate";
   currentValue: string;
   suggestedValue: string;
   confidence: number;
   evidence: string;
+  sourceText?: string;
   conflict?: string;
+  entity?: {
+    hospital?: Hospital;
+    contact?: Contact;
+  };
 };
 
 type ChatMessage = {
   id: string;
   content: string;
   role: "user" | "assistant";
+  hospitalId?: string;
 };
 
 const today = new Date("2026-07-18T12:00:00+08:00");
@@ -316,16 +322,20 @@ export default function DawnApp() {
   const [hospitals, setHospitals] = useState(initialHospitals);
   const [activeStage, setActiveStage] = useState<Stage | "All">("All");
   const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("priority");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [manualOrder, setManualOrder] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [note, setNote] = useState("<strong>High priority</strong><br>☐ Book kickoff for Northbridge<br>☐ Send EAA packet to Harborview<br>☐ Check pilot form at Redwood");
+  const [note, setNote] = useState("<strong>High</strong><br>☐ Book kickoff for Northbridge<br>☐ Send EAA packet to Harborview<br>☐ Check pilot form at Redwood");
   const [composer, setComposer] = useState("");
   const [isNoteOpen, setNoteOpen] = useState(true);
   const [isNoteMenuOpen, setNoteMenuOpen] = useState(false);
   const [noteColor, setNoteColor] = useState<"yellow" | "peach" | "pink">("yellow");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isReviewOpen, setReviewOpen] = useState(false);
+  const [isDawnFocused, setDawnFocused] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Hospital[] | null>(null);
   const [isListening, setListening] = useState(false);
   const [isDawnExpanded, setDawnExpanded] = useState(false);
@@ -396,7 +406,7 @@ export default function DawnApp() {
 
   useEffect(() => {
     if (!note.includes('type="checkbox"')) {
-      setNote('<strong>High priority</strong><br><label><input type="checkbox" /> Book kickoff for Northbridge</label><br><label><input type="checkbox" /> Send EAA packet to Harborview</label><br><label><input type="checkbox" /> Check pilot form at Redwood</label>');
+      setNote('<strong>High</strong><br><label><input type="checkbox" /> Book kickoff for Northbridge</label><br><label><input type="checkbox" /> Send EAA packet to Harborview</label><br><label><input type="checkbox" /> Check pilot form at Redwood</label>');
     }
   }, []);
 
@@ -410,6 +420,12 @@ export default function DawnApp() {
     document.addEventListener("mousedown", collapseUntouchedDawn);
     return () => document.removeEventListener("mousedown", collapseUntouchedDawn);
   }, [chatMessages.length, composer, isDawnExpanded]);
+
+  useEffect(() => {
+    if (!isDawnFocused) return;
+    const frame = window.requestAnimationFrame(() => dawnPanelRef.current?.scrollTo({ top: 0 }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [isDawnFocused, suggestions.length]);
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -426,8 +442,17 @@ export default function DawnApp() {
           hospital.lastInteraction,
         ].some((value) => value.toLowerCase().includes(search));
       })
-      .sort((a, b) => priorityScore(b) - priorityScore(a));
-  }, [activeStage, hospitals, query]);
+      .sort((a, b) => {
+        if (sortKey === "priority" && manualOrder.length) {
+          const aManualIndex = manualOrder.indexOf(a.id);
+          const bManualIndex = manualOrder.indexOf(b.id);
+          if (aManualIndex >= 0 && bManualIndex >= 0) return aManualIndex - bManualIndex;
+          if (aManualIndex >= 0) return -1;
+          if (bManualIndex >= 0) return 1;
+        }
+        return compareHospitals(a, b, sortKey, sortDirection);
+      });
+  }, [activeStage, hospitals, manualOrder, query, sortDirection, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / 10));
   const visibleHospitals = filtered.slice((page - 1) * 10, page * 10);
@@ -509,6 +534,21 @@ export default function DawnApp() {
     setPage(1);
   }
 
+  function toggleSort(key: SortKey) {
+    setPage(1);
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection(key === "priority" || key === "lastInteraction" ? "desc" : "asc");
+  }
+
+  function sortIndicator(key: SortKey) {
+    if (sortKey !== key) return <span className="sort-indicator" aria-hidden="true">↕</span>;
+    return <span className="sort-indicator active" aria-hidden="true">{sortDirection === "asc" ? "↑" : "↓"}</span>;
+  }
+
   function adjustPriority(hospital: Hospital, direction: 1 | -1) {
     setLastSnapshot(hospitals);
     setHospitals((current) =>
@@ -533,7 +573,7 @@ export default function DawnApp() {
     );
   }
 
-  function placeBelow(hospitalId: string) {
+  function placeAtPriorityPosition(hospitalId: string, position: "before" | "after") {
     if (!draggedHospitalId || draggedHospitalId === hospitalId) return;
 
     setLastSnapshot(hospitals);
@@ -543,7 +583,16 @@ export default function DawnApp() {
       const targetHospital = current.find((hospital) => hospital.id === hospitalId);
       if (!draggedHospital || !targetHospital) return current;
 
-      const nextAdjustment = priorityScore(targetHospital) - 1 - suggestedPriorityScore(draggedHospital);
+      const ordered = [...current].sort((a, b) => priorityScore(b) - priorityScore(a));
+      const targetIndex = ordered.findIndex((hospital) => hospital.id === targetHospital.id);
+      const neighbour = position === "before" ? ordered[targetIndex - 1] : ordered[targetIndex + 1];
+      const targetScore = priorityScore(targetHospital);
+      const rawNextScore = neighbour
+        ? (targetScore + priorityScore(neighbour)) / 2
+        : targetScore + (position === "before" ? 1 : -1);
+      const [tierFloor, tierCeiling] = priorityScoreRange(priorityFor(targetHospital));
+      const nextScore = Math.max(tierFloor, Math.min(tierCeiling, rawNextScore));
+      const nextAdjustment = nextScore - suggestedPriorityScore(draggedHospital);
       return current.map((hospital) =>
         hospital.id === draggedHospital.id
           ? {
@@ -554,7 +603,7 @@ export default function DawnApp() {
                   id: `audit-${Date.now()}`,
                   at: timestampNow(),
                   by: "Demo user",
-                  action: `Placed below ${targetHospital.name} in priority order`,
+                  action: `Placed ${position} ${targetHospital.name}; priority is now ${priorityFor(targetHospital)}`,
                   source: "Manual drag priority",
                 },
                 ...hospital.audit,
@@ -562,6 +611,20 @@ export default function DawnApp() {
             }
           : hospital,
       );
+    });
+    setManualOrder((currentOrder) => {
+      const ordered = [...hospitals].sort((a, b) => {
+        const aManualIndex = currentOrder.indexOf(a.id);
+        const bManualIndex = currentOrder.indexOf(b.id);
+        if (aManualIndex >= 0 && bManualIndex >= 0) return aManualIndex - bManualIndex;
+        if (aManualIndex >= 0) return -1;
+        if (bManualIndex >= 0) return 1;
+        return compareHospitals(a, b, "priority", "desc");
+      });
+      const ids = ordered.map((hospital) => hospital.id).filter((id) => id !== draggedHospitalId);
+      const targetIndex = ids.indexOf(hospitalId);
+      ids.splice(Math.max(0, targetIndex + (position === "after" ? 1 : 0)), 0, draggedHospitalId);
+      return ids;
     });
     setDraggedHospitalId(null);
     setDragOverHospitalId(null);
@@ -573,6 +636,7 @@ export default function DawnApp() {
 
     recordChatMessage(text, "user");
     setDawnExpanded(true);
+    setDawnFocused(true);
 
     if (/export|excel|download/i.test(text)) {
       void exportAllArchive(hospitals, uploadedFiles);
@@ -581,10 +645,18 @@ export default function DawnApp() {
       return;
     }
 
-    const nextSuggestions = createSuggestions(text, hospitals);
+    const nextSuggestions = createSuggestions(text, hospitals).map((suggestion) => ({ ...suggestion, sourceText: text }));
     setSuggestions(nextSuggestions);
-    recordChatMessage(
-      nextSuggestions.length
+    const readableFields = nextSuggestions.map((suggestion) => formatSuggestionField(suggestion.field).toLowerCase());
+    const affectedHospitals = [...new Set(nextSuggestions.map((suggestion) => suggestion.hospitalName))];
+    if (nextSuggestions.length) {
+      recordChatMessage(
+        `I found ${nextSuggestions.length} proposed ${nextSuggestions.length === 1 ? "update" : "updates"} across ${affectedHospitals.join(", ")}: ${readableFields.join(", ")}. I’ve kept the source note unchanged and made the proposed interactions concise for your review.`,
+        "assistant",
+      );
+    }
+    if (!nextSuggestions.length) recordChatMessage(
+      false
         ? `Okay, noted. It sounds like you want to update ${nextSuggestions.map((suggestion) => `${suggestion.hospitalName}'s ${suggestion.field}`).join(" and ")}. I’ve prepared ${nextSuggestions.length === 1 ? "the change" : "the changes"} below for your approval.`
         : "Okay, noted. I couldn’t safely identify a record to change, so I’ve left everything unchanged.",
       "assistant",
@@ -592,10 +664,10 @@ export default function DawnApp() {
     setComposer("");
   }
 
-  function recordChatMessage(content: string, role: ChatMessage["role"] = "user") {
+  function recordChatMessage(content: string, role: ChatMessage["role"] = "user", hospitalId?: string) {
     setChatMessages((current) => {
       if (current[current.length - 1]?.content === content && current[current.length - 1]?.role === role) return current;
-      return [...current, { id: `chat-${Date.now()}-${role}-${current.length}`, content, role }];
+      return [...current, { id: `chat-${Date.now()}-${role}-${current.length}`, content, role, hospitalId }];
     });
   }
 
@@ -626,8 +698,8 @@ export default function DawnApp() {
                   id: `audit-${interaction.id}`,
                   at: timestampNow(),
                   by: "Demo user",
-                  action: `Attached ${interaction.kind === "voice" ? "voice note" : interaction.label}`,
-                  source: "Dawn AI",
+                  action: `Dawn AI added ${interaction.kind === "voice" ? "a voice note" : interaction.kind === "note" ? "a note" : interaction.kind === "image" ? "an image" : "a file"}: ${interaction.label}`,
+                  source: "Linked interaction",
                 },
                 ...hospital.audit,
               ],
@@ -640,14 +712,18 @@ export default function DawnApp() {
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const hospital = inferAttachmentHospital(file.name);
+    const extraction = await extractTextFromFile(file);
+    const sourceText = extraction.text.trim();
+    const hospital = inferAttachmentHospital(`${file.name}\n${sourceText}`);
     if (!hospital) return;
     const data = await file.arrayBuffer();
     const kind = file.type.startsWith("image/") ? "image" : "file";
     const interaction: EvidenceItem = {
       id: `interaction-${Date.now()}`,
       label: file.name,
-      text: `Attached through Dawn AI and linked to ${hospital.name}.`,
+      text: sourceText
+        ? `Extracted from ${file.name}: ${sourceText.slice(0, 420)}${sourceText.length > 420 ? "…" : ""}`
+        : `Attached through Dawn AI and linked to ${hospital.name}. ${extraction.note}`,
       at: today.toISOString().slice(0, 10),
       kind,
     };
@@ -666,9 +742,12 @@ export default function DawnApp() {
       },
       ...current,
     ]);
-    recordChatMessage(`Attached ${file.name} to ${hospital.name}.`);
+    recordChatMessage(sourceText
+      ? `Extracted ${sourceText.length} characters from ${file.name}, linked it to ${hospital.name}, and prepared any safe changes for review.`
+      : `Attached ${file.name} as an interaction for ${hospital.name}. ${extraction.note}`, "assistant");
     setDawnExpanded(true);
-    setSuggestions(createSuggestions(`Uploaded file: ${file.name} for ${hospital.name}`, hospitals, file.name));
+    setSuggestions(createSuggestions(`Uploaded file: ${file.name}\n${sourceText || `for ${hospital.name}`}`, hospitals, file.name)
+      .map((suggestion) => ({ ...suggestion, sourceText: sourceText || undefined })));
     event.target.value = "";
   }
 
@@ -693,6 +772,8 @@ export default function DawnApp() {
       setListening(false);
       return;
     }
+
+    setDawnFocused(true);
 
     const browserWindow = window as Window & {
       SpeechRecognition?: SpeechRecognitionConstructor;
@@ -740,21 +821,33 @@ export default function DawnApp() {
     );
   }
 
+  function updateContactSuggestionField(id: string, field: "name" | "title" | "department", value: string) {
+    setSuggestions((current) => current.map((suggestion) => {
+      if (suggestion.id !== id || (suggestion.field !== "newContact" && suggestion.field !== "contactUpdate") || !suggestion.entity?.contact) return suggestion;
+      const contact = { ...suggestion.entity.contact, [field]: value };
+      return {
+        ...suggestion,
+        entity: { ...suggestion.entity, contact },
+        suggestedValue: `${contact.name} · ${contact.title}`,
+      };
+    }));
+  }
+
   function dismissSuggestion(id: string) {
     setSuggestions((current) => current.filter((suggestion) => suggestion.id !== id));
   }
 
   function approveSuggestion(suggestion: Suggestion) {
     setLastSnapshot(hospitals);
-    setHospitals((current) => applySuggestion(current, suggestion));
+    setHospitals((current) => attachApprovedNoteInteraction(applySuggestion(current, suggestion), suggestion));
     dismissSuggestion(suggestion.id);
-    recordChatMessage(`Done — ${suggestion.hospitalName}'s ${suggestion.field} is now updated.`, "assistant");
+    recordChatMessage(`Done — ${formatSuggestionField(suggestion.field)} saved for ${suggestion.hospitalName}.`, "assistant", suggestion.hospitalId);
   }
 
   function approveAll() {
     setLastSnapshot(hospitals);
-    setHospitals((current) => suggestions.reduce(applySuggestion, current));
-    recordChatMessage(`Done — I applied ${suggestions.length} approved update${suggestions.length === 1 ? "" : "s"}.`, "assistant");
+    setHospitals((current) => suggestions.reduce((next, suggestion) => attachApprovedNoteInteraction(applySuggestion(next, suggestion), suggestion), current));
+    suggestions.forEach((suggestion) => recordChatMessage(`Done — ${formatSuggestionField(suggestion.field)} saved for ${suggestion.hospitalName}.`, "assistant", suggestion.hospitalId));
     setSuggestions([]);
     setReviewOpen(false);
   }
@@ -880,7 +973,9 @@ export default function DawnApp() {
           <div className="hospital-table" role="table">
             <div className="table-row table-head" role="row">
               <div role="columnheader" className="status-heading">
-                {settings.fieldLabels.priority}
+                <button className="sort-header" onClick={() => toggleSort("priority")} aria-label={`Sort by ${settings.fieldLabels.priority}`}>
+                  {settings.fieldLabels.priority} {sortIndicator("priority")}
+                </button>
                 <span className="info-dot" tabIndex={0}>
                   ^
                   <span className="tooltip">
@@ -891,9 +986,9 @@ export default function DawnApp() {
                   </span>
                 </span>
               </div>
-              <div role="columnheader">{settings.fieldLabels.hospital}</div>
+              <div role="columnheader"><button className="sort-header" onClick={() => toggleSort("hospital")}>{settings.fieldLabels.hospital} {sortIndicator("hospital")}</button></div>
               <div role="columnheader" className="status-heading">
-                {settings.fieldLabels.stage}
+                <button className="sort-header" onClick={() => toggleSort("stage")}>{settings.fieldLabels.stage} {sortIndicator("stage")}</button>
                 <span className="info-dot" tabIndex={0}>
                   ^
                   <span className="tooltip stage-tip">
@@ -905,9 +1000,9 @@ export default function DawnApp() {
                   </span>
                 </span>
               </div>
-              <div role="columnheader">{settings.fieldLabels.nextStep}</div>
-              <div role="columnheader">{settings.fieldLabels.lastInteraction}</div>
-              <div role="columnheader">{settings.fieldLabels.awaiting}</div>
+              <div role="columnheader"><button className="sort-header" onClick={() => toggleSort("nextStep")}>{settings.fieldLabels.nextStep} {sortIndicator("nextStep")}</button></div>
+              <div role="columnheader"><button className="sort-header" onClick={() => toggleSort("lastInteraction")}>{settings.fieldLabels.lastInteraction} {sortIndicator("lastInteraction")}</button></div>
+              <div role="columnheader"><button className="sort-header" onClick={() => toggleSort("awaiting")}>{settings.fieldLabels.awaiting} {sortIndicator("awaiting")}</button></div>
             </div>
             {visibleHospitals.map((hospital) => {
               const priority = priorityFor(hospital);
@@ -917,7 +1012,6 @@ export default function DawnApp() {
                 className={`table-row data-row priority-${priority.toLowerCase().replaceAll(" ", "-")} ${dragOverHospitalId === hospital.id ? "is-drag-target" : ""}`}
                 role="row"
                 key={hospital.id}
-                onClick={() => openHospital(hospital)}
                 draggable
                 onDragStart={(event) => {
                   event.dataTransfer.effectAllowed = "move";
@@ -934,7 +1028,8 @@ export default function DawnApp() {
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
-                  placeBelow(hospital.id);
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  placeAtPriorityPosition(hospital.id, event.clientY < bounds.top + bounds.height / 2 ? "before" : "after");
                 }}
                 ref={(element) => {
                   if (element) rowRefs.current.set(hospital.id, element);
@@ -974,7 +1069,7 @@ export default function DawnApp() {
                   </div>
                 </div>
                 <div role="cell">
-                  <button className="hospital-name" type="button">
+                  <button className="hospital-name" type="button" onClick={() => openHospital(hospital)}>
                     {hospital.name}
                   </button>
                 </div>
@@ -1062,17 +1157,36 @@ export default function DawnApp() {
             />
           </section> : <button className="open-note" type="button" onClick={() => setNoteOpen(true)}>Open note</button>}
 
-          <section ref={dawnPanelRef} className={`dawn-sidecar ${isDawnExpanded ? "is-expanded" : ""}`} aria-label="Ask Dawn">
+          <section ref={dawnPanelRef} className={`dawn-sidecar ${isDawnExpanded ? "is-expanded" : ""} ${isDawnFocused ? "is-focused" : ""}`} aria-label="Ask Dawn">
             {isDawnExpanded ? (
               <>
                 <header>
                   <div className="chat-title">
                     <h2>Ask Dawn</h2>
                   </div>
+                  {isDawnFocused ? <button className="chat-focus-close" type="button" aria-label="Minimize Ask Dawn" onClick={() => setDawnFocused(false)}>×</button> : null}
                 </header>
                 <div className="chat-thread" aria-live="polite">
                   {chatMessages.length ? (
-                    chatMessages.map((message) => <p className={`chat-message ${message.role}`} key={message.id}>{message.content}</p>)
+                    chatMessages.map((message) => (
+                      <div className={`chat-message ${message.role}`} key={message.id}>
+                        <span>{message.content}</span>
+                        {message.role === "assistant" && message.hospitalId ? (
+                          <button
+                            className="chat-message-open-record"
+                            type="button"
+                            aria-label={`Open ${message.content.match(/for (.+)\.$/)?.[1] ?? "approved record"}`}
+                            title="Open approved record"
+                            onClick={() => {
+                              const hospital = hospitals.find((item) => item.id === message.hospitalId);
+                              if (hospital) openHospital(hospital);
+                            }}
+                          >
+                            ↗
+                          </button>
+                        ) : null}
+                      </div>
+                    ))
                   ) : (
                     <p className="chat-empty">Use the microphone for a voice note, type a quick update, or drop a file. Dawn will do the rest.</p>
                   )}
@@ -1084,14 +1198,17 @@ export default function DawnApp() {
                         <b>Dawn suggests {suggestions.length} change{suggestions.length === 1 ? "" : "s"}</b>
                         <small>Review each one before it updates Onboard.</small>
                       </div>
-                      <button className="chat-approve-all" onClick={approveAll}>Approve all</button>
+                      <div className="chat-review-actions">
+                        <button className="chat-focus-review" onClick={() => setDawnFocused(true)}>Review</button>
+                        <button className="chat-approve-all" onClick={approveAll}>Approve all</button>
+                      </div>
                     </header>
                     {suggestions.map((suggestion) => (
                       <article key={suggestion.id}>
                         <div className="chat-suggestion-title">
                           <b>{suggestion.hospitalName}</b>
                           <div>
-                            <span>{suggestion.field}</span>
+                            <span>{formatSuggestionField(suggestion.field)}</span>
                             <button
                               className="open-hospital-button"
                               aria-label={`Open ${suggestion.hospitalName}`}
@@ -1105,11 +1222,17 @@ export default function DawnApp() {
                             </button>
                           </div>
                         </div>
-                        <input
-                          aria-label={`Suggested ${suggestion.field} for ${suggestion.hospitalName}`}
-                          value={suggestion.suggestedValue}
-                          onChange={(event) => updateSuggestion(suggestion.id, event.target.value)}
-                        />
+                        <p className="suggestion-diff"><span>Current</span>{suggestion.currentValue || "Not set"}<span>Suggested</span></p>
+                        {isEntitySuggestion(suggestion) ? (
+                          <EntityStoragePreview suggestion={suggestion} onContactFieldChange={updateContactSuggestionField} />
+                        ) : (
+                          <textarea
+                            aria-label={`Suggested ${suggestion.field} for ${suggestion.hospitalName}`}
+                            rows={suggestion.field === "lastInteraction" ? 3 : 2}
+                            value={suggestion.suggestedValue}
+                            onChange={(event) => updateSuggestion(suggestion.id, event.target.value)}
+                          />
+                        )}
                         <small>{suggestion.confidence}% confidence · from this update</small>
                         {suggestion.conflict ? <p className="conflict">{suggestion.conflict}</p> : null}
                         <div>
@@ -1132,6 +1255,10 @@ export default function DawnApp() {
                       event.currentTarget.style.height = "auto";
                       event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 94)}px`;
                     }}
+                    onFocus={() => {
+                      setDawnFocused(true);
+                      window.requestAnimationFrame(() => dawnPanelRef.current?.scrollTo({ top: 0 }));
+                    }}
                     onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
@@ -1147,7 +1274,7 @@ export default function DawnApp() {
                 </section>
               </>
             ) : (
-              <button className="dawn-prompt" type="button" onClick={() => setDawnExpanded(true)} aria-expanded={false}>
+              <button className="dawn-prompt" type="button" onClick={() => { setDawnExpanded(true); setDawnFocused(true); }} aria-expanded={false}>
                 <span className="dawn-prompt-mic" aria-hidden="true"><MicIcon /></span>
                 <span>
                   <b>{dawnPrompts[dawnPromptIndex]}</b>
@@ -1166,6 +1293,7 @@ export default function DawnApp() {
           onDismiss={dismissSuggestion}
           onClose={() => setReviewOpen(false)}
           onEdit={updateSuggestion}
+          onEditContactField={updateContactSuggestionField}
         />
       ) : null}
 
@@ -1198,37 +1326,280 @@ export default function DawnApp() {
   );
 }
 
-function createSuggestions(text: string, hospitals: Hospital[], source = "Messy note"): Suggestion[] {
-  const lower = text.toLowerCase();
-  const mentioned = hospitals.find((hospital) => {
-    const name = hospital.name.toLowerCase();
-    const distinctiveWord = name.split(/[^a-z]+/).find((word) => word.length >= 6);
-    return lower.includes(name) || Boolean(distinctiveWord && lower.includes(distinctiveWord));
-  });
-  const target = mentioned ?? [...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a))[0];
-  if (!target) return [];
+function formatSuggestionField(field: Suggestion["field"]) {
+  return field === "newHospital" ? "New hospital" : field === "newContact" ? "New contact" : field === "contactUpdate" ? "Update contact" : field === "lastInteraction" ? "Last interaction" : field === "nextStep" ? "Next step" : field === "awaiting" ? "Awaiting" : field === "stage" ? "Stage" : "Notes";
+}
 
-  const updates: Suggestion[] = [];
-  const conciseUpdate = text.replace(/\s+/g, " ").trim().slice(0, 180);
-  updates.push(buildSuggestion(target, "lastInteraction", target.lastInteraction, conciseUpdate, mentioned ? 94 : 62, source, mentioned ? undefined : "No organisation was named, so Dawn selected the highest-priority site. Confirm before approving."));
+function isEntitySuggestion(suggestion: Suggestion) {
+  return suggestion.field === "newHospital" || suggestion.field === "newContact" || suggestion.field === "contactUpdate";
+}
 
-  if (/\b(eaa|loi|agreement|data agreement)\b.*\b(signed|complete|approved)\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "nextStep", target.nextStep, "Schedule kickoff", mentioned ? 90 : 58, source));
-  } else if (/\bkickoff\b.*\b(scheduled|booked|confirmed)\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "stage", target.stage, "Kickoff", mentioned ? 89 : 58, source));
-  } else if (/\bpilot\b.*\b(completed|complete)\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "stage", target.stage, "Active", mentioned ? 86 : 56, source, "Confirm the site has completed its pilot exit criteria before approving."));
-  } else if (/\bpilot\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "stage", target.stage, "Pilot", mentioned ? 84 : 55, source));
+function EntityStoragePreview({
+  suggestion,
+  onContactFieldChange,
+}: {
+  suggestion: Suggestion;
+  onContactFieldChange?: (id: string, field: "name" | "title" | "department", value: string) => void;
+}) {
+  const contact = suggestion.entity?.contact;
+  const hospital = suggestion.entity?.hospital;
+
+  if ((suggestion.field === "newContact" || suggestion.field === "contactUpdate") && contact) {
+    return (
+      <section className="suggestion-storage-preview" aria-label={`Contact fields to save for ${contact.name}`}>
+        <p>{suggestion.field === "newContact" ? "Will be saved as a new contact" : "Will update this existing contact"}</p>
+        <dl>
+          <div><dt>Name</dt><dd>{onContactFieldChange ? <input aria-label={`Contact name to save for ${suggestion.hospitalName}`} value={contact.name} onChange={(event) => onContactFieldChange(suggestion.id, "name", event.target.value)} /> : contact.name}</dd></div>
+          <div><dt>Title</dt><dd>{onContactFieldChange ? <input aria-label={`Contact title to save for ${suggestion.hospitalName}`} value={contact.title} onChange={(event) => onContactFieldChange(suggestion.id, "title", event.target.value)} /> : contact.title}</dd></div>
+          <div><dt>Department</dt><dd>{onContactFieldChange ? <input aria-label={`Contact department to save for ${suggestion.hospitalName}`} value={contact.department || "To be confirmed"} onChange={(event) => onContactFieldChange(suggestion.id, "department", event.target.value)} /> : (contact.department || "To be confirmed")}</dd></div>
+        </dl>
+      </section>
+    );
   }
 
-  if (/\b(waiting on us|waiting on jeremy|we need to|our team)\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "awaiting", target.awaiting, "us", mentioned ? 88 : 58, source));
+  if (suggestion.field === "newHospital" && hospital) {
+    return (
+      <section className="suggestion-storage-preview" aria-label={`Hospital fields to save for ${hospital.name}`}>
+        <p>Will be saved as a new hospital</p>
+        <dl>
+          <div><dt>Hospital name</dt><dd>{hospital.name}</dd></div>
+          <div><dt>Country</dt><dd>{hospital.country}</dd></div>
+          <div><dt>Starting stage</dt><dd>{hospital.stage} · {hospital.substage}</dd></div>
+        </dl>
+      </section>
+    );
+  }
+
+  return null;
+}
+
+function createSuggestions(text: string, hospitals: Hospital[], source = "Messy note"): Suggestion[] {
+  const entitySuggestions = createEntitySuggestions(text, hospitals, source);
+  const mentionedHospitals = hospitals.filter((hospital) => hospitalMentioned(text, hospital));
+  const targets = mentionedHospitals.length
+    ? mentionedHospitals
+    : entitySuggestions.length
+      ? []
+      : [[...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a))[0]].filter(Boolean) as Hospital[];
+
+  const hospitalSuggestions = targets.flatMap((hospital) => {
+    const context = hospitalContext(text, hospital, hospitals);
+    if (!context || isExplicitlyUnrelated(context)) return [];
+    return createHospitalSuggestions(hospital, context, source, mentionedHospitals.length > 0);
+  });
+
+  return [...entitySuggestions, ...hospitalSuggestions].slice(0, 10);
+}
+
+function createEntitySuggestions(text: string, hospitals: Hospital[], source: string): Suggestion[] {
+  const updates: Suggestion[] = [];
+  const newHospitalMatch = text.match(/(?:new\s+(?:hospital|site)|add\s+(?:a\s+)?new\s+(?:hospital|site))\s*[:\-]?\s*(?:called\s+|named\s+)?([A-Z][A-Za-z&' -]+?)(?=,|\s+(?:in|from|based)\b|[.!])/i);
+  const newHospitalName = newHospitalMatch?.[1]?.trim().replace(/\s+/g, " ");
+  const country = countries.find((candidate) => new RegExp(`\\b${candidate}\\b`, "i").test(text)) ?? "Singapore";
+  const newHospitalId = newHospitalName ? `new-${slugify(newHospitalName)}` : "";
+
+  if (newHospitalName && !hospitals.some((hospital) => hospital.name.toLowerCase() === newHospitalName.toLowerCase())) {
+    const proposedHospital: Hospital = {
+      id: newHospitalId,
+      name: newHospitalName,
+      country,
+      stage: "Interest",
+      substage: "Agreements sent",
+      nextStep: "Send EAA packet",
+      lastInteractionAt: "2026-07-18",
+      lastInteraction: `New hospital identified from Dawn note.`,
+      awaiting: "hospital",
+      priorityAdjustment: 0,
+      awaitingContactId: "",
+      notes: "Created from an approved Dawn suggestion.",
+      contacts: [],
+      evidence: [],
+      audit: [],
+      stageHistory: ["Interest: created from approved Dawn suggestion"],
+    };
+    updates.push({
+      id: `${newHospitalId}-new-hospital-${Date.now()}`,
+      hospitalId: newHospitalId,
+      hospitalName: newHospitalName,
+      field: "newHospital",
+      currentValue: "Not in Onboard",
+      suggestedValue: `${newHospitalName} · ${country} · Interest`,
+      confidence: 88,
+      evidence: source,
+      entity: { hospital: proposedHospital },
+    });
+
+    const contact = extractProposedContact(text);
+    if (contact) updates.push(buildNewContactSuggestion(newHospitalId, newHospitalName, contact, source));
+  }
+
+  for (const hospital of hospitals) {
+    const context = hospitalContext(text, hospital, hospitals);
+    if (!context || isExplicitlyUnrelated(context)) continue;
+    const contact = extractProposedContact(context);
+    if (contact) {
+      const existing = hospital.contacts.find((item) => item.name.toLowerCase() === contact.name.toLowerCase());
+      if (!existing) {
+        updates.push(buildNewContactSuggestion(hospital.id, hospital.name, contact, source));
+      } else if (existing.title !== contact.title || existing.department.trim().toLowerCase() !== contact.department.trim().toLowerCase()) {
+        updates.push(buildContactUpdateSuggestion(hospital.id, hospital.name, existing, contact, source));
+      }
+    }
+  }
+
+  return updates;
+}
+
+function extractProposedContact(text: string): Contact | null {
+  const match = text.match(/(?:new\s+contact|add\s+(?:a\s+)?contact|main\s+contact(?:\s+is)?|contact(?:\s+is)?)\s*[:\-]?\s*(?:is\s+)?((?:Dr\.?\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*,?\s*(?:the\s+)?([A-Za-z /()-]+?)(?=[.!;]|$)/i);
+  if (!match) return null;
+  const name = match[1].replace(/\s+/g, " ").trim();
+  const role = match[2].trim().toLowerCase();
+  const title = contactTitles.find((candidate) => role.includes(candidate.toLowerCase().split(" /")[0]))
+    ?? (role.includes("security") ? "IT Security Officer"
+      : role.includes("legal") ? "Legal Counsel"
+      : role.includes("clinical") || role.includes("trial") ? "Clinical Trials Manager / Clinical Operations Manager"
+      : "Hospital Administrator");
+  const department = role.includes("security") || title === "IT Security Officer" ? "Information Technology"
+    : role.includes("legal") ? "Legal"
+      : role.includes("clinical") || role.includes("trial") ? "Clinical Operations"
+        : role ? role.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "To be confirmed";
+  return {
+    id: `contact-${slugify(name)}-${Date.now()}`,
+    name,
+    email: "",
+    department,
+    title,
+  };
+}
+
+function buildNewContactSuggestion(hospitalId: string, hospitalName: string, contact: Contact, source: string): Suggestion {
+  return {
+    id: `${hospitalId}-${contact.id}-new-contact`,
+    hospitalId,
+    hospitalName,
+    field: "newContact",
+    currentValue: "No matching contact",
+    suggestedValue: `${contact.name} · ${contact.title}`,
+    confidence: 86,
+    evidence: source,
+    entity: { contact },
+  };
+}
+
+function buildContactUpdateSuggestion(hospitalId: string, hospitalName: string, existing: Contact, proposed: Contact, source: string): Suggestion {
+  return {
+    id: `${hospitalId}-${existing.id}-contact-update-${Date.now()}`,
+    hospitalId,
+    hospitalName,
+    field: "contactUpdate",
+    currentValue: `${existing.name} · ${existing.title}`,
+    suggestedValue: `${proposed.name} · ${proposed.title}`,
+    confidence: 84,
+    evidence: source,
+    entity: { contact: { ...proposed, id: existing.id, email: existing.email } },
+  };
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function hospitalMentioned(text: string, hospital: Hospital) {
+  const lower = text.toLowerCase();
+  const words = hospital.name.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  const genericSiteWords = new Set(["academic", "center", "clinic", "general", "health", "hospital", "institute", "medical", "research", "university"]);
+  const distinctiveWord = words.find((word) => word.length >= 6 && !genericSiteWords.has(word));
+  const aliases = [hospital.name.toLowerCase(), words.slice(0, 2).join(" "), distinctiveWord];
+  return aliases.some((alias) => Boolean(alias && lower.includes(alias)));
+}
+
+function hospitalContext(text: string, hospital: Hospital, hospitals: Hospital[]) {
+  const sentences = text.split(/(?<=[.!?])\s+|;\s+/).filter(Boolean);
+  const collected: string[] = [];
+  let isCurrentHospital = false;
+
+  for (const sentence of sentences) {
+    const namedHere = hospitals.filter((candidate) => hospitalMentioned(sentence, candidate));
+
+    if (namedHere.length) {
+      isCurrentHospital = namedHere.some((candidate) => candidate.id === hospital.id);
+      if (isCurrentHospital) collected.push(sentence);
+      continue;
+    }
+
+    // Voice notes often add an ownership detail immediately after naming a site
+    // (for example, “that one is on me”). Carry only these clear continuations
+    // forward, so personal asides do not become hospital updates.
+    if (isCurrentHospital && /\b(that one|on me|with me|waiting|awaiting|also|we need|i need)\b/i.test(sentence)) {
+      collected.push(sentence);
+    }
+  }
+
+  return collected.join(" ").trim();
+}
+
+function isExplicitlyUnrelated(text: string) {
+  return /\b(ignore|unrelated|did not have a call|no call today|not about)\b/i.test(text);
+}
+
+function createHospitalSuggestions(hospital: Hospital, context: string, source: string, named: boolean): Suggestion[] {
+  const lower = context.toLowerCase();
+  const updates: Suggestion[] = [];
+  const confidence = named ? 94 : 62;
+  const stageChangeDenied = /\b(scratch that|do not|don't|not)\b.{0,42}\b(move|change|active|stage|kickoff)\b/i.test(context);
+  const legalReviewPending = /\b(legal|contract)\b.{0,48}\b(review|reviewing|needs to review|pending)\b/i.test(context);
+
+  updates.push(buildSuggestion(hospital, "lastInteraction", hospital.lastInteraction, createInteractionSummary(context, hospital), confidence, source));
+
+  if (/\b(eaa|loi|agreement|data agreement)\b.*\b(signed|complete|approved)\b/.test(lower)) {
+    const nextStep = legalReviewPending
+      ? "Follow up on legal review"
+      : /\b(send|share|offer)\b.{0,48}\b(times?|dates?|slots?)\b/.test(lower)
+        ? "Send kickoff time options"
+        : "Schedule kickoff";
+    updates.push(buildSuggestion(hospital, "nextStep", hospital.nextStep, nextStep, named ? 90 : 58, source));
+  } else if (!stageChangeDenied && /\bkickoff\b.*\b(scheduled|booked|confirmed)\b/.test(lower)) {
+    updates.push(buildSuggestion(hospital, "stage", hospital.stage, "Kickoff", named ? 89 : 58, source));
+  } else if (!stageChangeDenied && /\bpilot\b.*\b(completed|complete)\b/.test(lower)) {
+    updates.push(buildSuggestion(hospital, "stage", hospital.stage, "Active", named ? 86 : 56, source, "Confirm the site has completed its pilot exit criteria before approving."));
+  } else if (!stageChangeDenied && /\bpilot\b/.test(lower)) {
+    updates.push(buildSuggestion(hospital, "stage", hospital.stage, "Pilot", named ? 84 : 55, source));
+  }
+
+  if (/\b(waiting on jeremy|on me,? jeremy|on me\b|with me\b|my action|i need to|we need to|our team)\b/.test(lower)) {
+    updates.push(buildSuggestion(hospital, "awaiting", hospital.awaiting, "Jeremy", named ? 91 : 60, source));
   } else if (/\b(waiting on|awaiting|pending with)\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "awaiting", target.awaiting, "hospital", mentioned ? 84 : 56, source));
+    updates.push(buildSuggestion(hospital, "awaiting", hospital.awaiting, "hospital", named ? 84 : 56, source));
   }
 
   return updates.slice(0, 3);
+}
+
+function createInteractionSummary(text: string, hospital: Hospital) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  const contactMatch = normalized.match(/\b(?:spoke|talked|phone|call(?:ed)?)\s+with\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+  const contact = contactMatch?.[1]?.replace(/\b(?:uh|um|yeah)\b/gi, "").trim();
+  const facts: string[] = [];
+
+  if (/\b(eaa|data agreement)\b.{0,80}\b(signed|complete|approved)\b/.test(lower)) facts.push("EAA signed");
+  else if (/\bloi\b.{0,80}\b(signed|complete|approved)\b/.test(lower)) facts.push("LOI signed");
+  else if (/\bagreement\b.{0,80}\b(signed|complete|approved)\b/.test(lower)) facts.push("agreement signed");
+
+  if (/\bkickoff\b.{0,60}\bnext week\b|\bnext week\b.{0,60}\bkickoff\b/.test(lower)) facts.push("kickoff possible next week");
+  if (/\b(send|share|offer)\b.{0,48}\b(times?|dates?|slots?)\b/.test(lower)) facts.push("send time options");
+  if (/\basked for options\b/.test(lower)) facts.push("asked for kickoff options");
+  if (/\bdo not\b.{0,42}\b(move|change|active|stage|kickoff)\b/i.test(normalized)) facts.push("stage remains unchanged");
+
+  const opening = contact ? `Spoke with ${contact} at ${hospital.name}` : `Update from ${hospital.name}`;
+  if (facts.length) return `${opening}: ${facts.join("; ")}.`;
+
+  return normalized
+    .replace(/\b(?:um|uh|you know|sorry|quick one)\b[,.]?\s*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
 }
 
 function buildSuggestion(
@@ -1254,6 +1625,40 @@ function buildSuggestion(
 }
 
 function applySuggestion(hospitals: Hospital[], suggestion: Suggestion) {
+  if (suggestion.field === "newHospital" && suggestion.entity?.hospital) {
+    if (hospitals.some((hospital) => hospital.id === suggestion.entity?.hospital?.id || hospital.name.toLowerCase() === suggestion.entity?.hospital?.name.toLowerCase())) return hospitals;
+    const proposed = suggestion.entity.hospital;
+    return [{
+      ...proposed,
+      evidence: [{ id: `${suggestion.id}-evidence`, label: suggestion.evidence, text: `Created hospital record: ${proposed.name}`, at: "2026-07-18", kind: "note" as const }],
+      audit: [{ id: `${suggestion.id}-audit`, at: "2026-07-18 20:45", by: "Demo user", action: "Approved new hospital", source: suggestion.evidence }],
+    }, ...hospitals];
+  }
+
+  if (suggestion.field === "newContact" && suggestion.entity?.contact) {
+    const proposedContact = suggestion.entity.contact;
+    return hospitals.map((hospital) => {
+      if (hospital.id !== suggestion.hospitalId || hospital.contacts.some((contact) => contact.name.toLowerCase() === proposedContact.name.toLowerCase())) return hospital;
+      return {
+        ...hospital,
+        contacts: [...hospital.contacts, proposedContact],
+        audit: [{ id: `${suggestion.id}-audit`, at: "2026-07-18 20:45", by: "Demo user", action: `Approved new contact: ${proposedContact.name}`, source: suggestion.evidence }, ...hospital.audit],
+      };
+    });
+  }
+
+  if (suggestion.field === "contactUpdate" && suggestion.entity?.contact) {
+    const proposedContact = suggestion.entity.contact;
+    return hospitals.map((hospital) => {
+      if (hospital.id !== suggestion.hospitalId) return hospital;
+      return {
+        ...hospital,
+        contacts: hospital.contacts.map((contact) => contact.id === proposedContact.id ? { ...contact, ...proposedContact } : contact),
+        audit: [{ id: `${suggestion.id}-audit`, at: "2026-07-18 20:45", by: "Demo user", action: `Approved contact update: ${proposedContact.name}`, source: suggestion.evidence }, ...hospital.audit],
+      };
+    });
+  }
+
   return hospitals.map((hospital) => {
     if (hospital.id !== suggestion.hospitalId) return hospital;
     const next = { ...hospital };
@@ -1290,12 +1695,46 @@ function applySuggestion(hospitals: Hospital[], suggestion: Suggestion) {
   });
 }
 
+function attachApprovedNoteInteraction(hospitals: Hospital[], suggestion: Suggestion) {
+  const sourceText = suggestion.sourceText;
+  if (!sourceText) return hospitals;
+  return hospitals.map((hospital) => {
+    if (hospital.id !== suggestion.hospitalId) return hospital;
+    if (hospital.evidence.some((item) => item.kind === "note" && item.text === sourceText)) return hospital;
+    const interactionId = `${suggestion.id}-approved-note`;
+    return {
+      ...hospital,
+      evidence: [
+        {
+          id: interactionId,
+          label: "Approved Dawn AI note",
+          text: sourceText,
+          at: "2026-07-18",
+          kind: "note" as const,
+        },
+        ...hospital.evidence,
+      ],
+      audit: [
+        {
+          id: `${interactionId}-audit`,
+          at: "2026-07-18 20:45",
+          by: "Demo user",
+          action: `Attached approved Dawn AI note for ${suggestion.field} update`,
+          source: suggestion.evidence,
+        },
+        ...hospital.audit,
+      ],
+    };
+  });
+}
+
 function ReviewModal({
   suggestions,
   onApprove,
   onApproveAll,
   onDismiss,
   onEdit,
+  onEditContactField,
   onClose,
 }: {
   suggestions: Suggestion[];
@@ -1303,6 +1742,7 @@ function ReviewModal({
   onApproveAll: () => void;
   onDismiss: (id: string) => void;
   onEdit: (id: string, value: string) => void;
+  onEditContactField: (id: string, field: "name" | "title" | "department", value: string) => void;
   onClose: () => void;
 }) {
   return (
@@ -1322,9 +1762,13 @@ function ReviewModal({
             <article className="suggestion" key={suggestion.id}>
               <div>
                 <b>{suggestion.hospitalName}</b>
-                <span>{suggestion.field}</span>
+                <span>{formatSuggestionField(suggestion.field)}</span>
               </div>
-              <input value={suggestion.suggestedValue} onChange={(event) => onEdit(suggestion.id, event.target.value)} />
+              {isEntitySuggestion(suggestion) ? (
+                <EntityStoragePreview suggestion={suggestion} onContactFieldChange={onEditContactField} />
+              ) : (
+                <input value={suggestion.suggestedValue} onChange={(event) => onEdit(suggestion.id, event.target.value)} />
+              )}
               <small>
                 {suggestion.confidence}% confidence · source: {suggestion.evidence}
               </small>
@@ -1541,6 +1985,36 @@ function priorityScore(hospital: Hospital) {
   return suggestedPriorityScore(hospital) + hospital.priorityAdjustment;
 }
 
+function priorityScoreRange(priority: Priority): [number, number] {
+  switch (priority) {
+    case "Very urgent": return [90, Number.POSITIVE_INFINITY];
+    case "Urgent": return [78, 89.999];
+    case "Very high": return [66, 77.999];
+    case "High": return [57, 65.999];
+    case "Med": return [34, 56.999];
+    case "Low": return [Number.NEGATIVE_INFINITY, 33.999];
+  }
+}
+
+function compareHospitals(a: Hospital, b: Hospital, key: SortKey, direction: SortDirection) {
+  const multiplier = direction === "asc" ? 1 : -1;
+  const stageOrder: Record<Stage, number> = { Interest: 0, Kickoff: 1, Pilot: 2, Active: 3 };
+  const values: Record<SortKey, [string | number, string | number]> = {
+    priority: [priorityScore(a), priorityScore(b)],
+    hospital: [a.name, b.name],
+    stage: [stageOrder[a.stage], stageOrder[b.stage]],
+    nextStep: [a.nextStep, b.nextStep],
+    lastInteraction: [new Date(a.lastInteractionAt).getTime(), new Date(b.lastInteractionAt).getTime()],
+    awaiting: [a.awaiting === "us" ? "Jeremy" : contactAwaiting(a).name, b.awaiting === "us" ? "Jeremy" : contactAwaiting(b).name],
+    country: [a.country, b.country],
+  };
+  const [left, right] = values[key];
+  const comparison = typeof left === "number" && typeof right === "number"
+    ? left - right
+    : String(left).localeCompare(String(right));
+  return comparison * multiplier || a.name.localeCompare(b.name);
+}
+
 function priorityFor(hospital: Hospital): Priority {
   const score = priorityScore(hospital);
   if (score >= 90) return "Very urgent";
@@ -1568,6 +2042,74 @@ function formatDate(date: string) {
   return new Intl.DateTimeFormat("en", { day: "numeric", month: "short" }).format(new Date(`${date}T12:00:00+08:00`));
 }
 
+type ExtractedFileText = { text: string; note: string };
+
+async function extractTextFromFile(file: File): Promise<ExtractedFileText> {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+
+  if (["txt", "md", "csv", "json"].includes(extension)) {
+    return { text: await file.text(), note: "Text extracted locally." };
+  }
+
+  if (["xlsx", "xls"].includes(extension)) {
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const text = workbook.SheetNames.map((name) => {
+      const sheet = workbook.Sheets[name];
+      return `Sheet: ${name}\n${XLSX.utils.sheet_to_csv(sheet)}`;
+    }).join("\n\n");
+    return { text, note: "Spreadsheet text extracted locally." };
+  }
+
+  if (["docx", "pptx"].includes(extension)) {
+    const archive = await JSZip.loadAsync(await file.arrayBuffer());
+    const paths = extension === "docx"
+      ? ["word/document.xml"]
+      : Object.keys(archive.files).filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path)).sort();
+    const parts = await Promise.all(paths.map(async (path) => xmlToText(await archive.file(path)?.async("text") ?? "")));
+    return {
+      text: parts.filter(Boolean).join("\n\n"),
+      note: extension === "docx" ? "Word text extracted locally." : "PowerPoint slide text extracted locally.",
+    };
+  }
+
+  if (extension === "pdf") {
+    const text = extractEmbeddedPdfText(new Uint8Array(await file.arrayBuffer()));
+    return {
+      text,
+      note: text ? "Embedded PDF text extracted locally." : "This PDF appears scanned or encoded; OCR will be needed to read it.",
+    };
+  }
+
+  if (["jpg", "jpeg", "png", "webp"].includes(extension) || file.type.startsWith("image/")) {
+    return { text: "", note: "Image stored. OCR is required before Dawn can read text in this image." };
+  }
+
+  if (extension === "canva") {
+    return { text: "", note: "Export this Canva design as PDF, PPTX, or PNG, then upload that export for extraction." };
+  }
+
+  return { text: "", note: "This file was stored, but its text format is not yet supported." };
+}
+
+function xmlToText(xml: string) {
+  return xml
+    .replace(/<w:tab\/>|<a:br\/>|<w:br\/>/g, " ")
+    .replace(/<\/w:p>|<\/a:p>/g, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractEmbeddedPdfText(bytes: Uint8Array) {
+  const raw = new TextDecoder("latin1").decode(bytes);
+  const fragments = [...raw.matchAll(/\((?:\\.|[^\\)])*\)\s*Tj/g)]
+    .map((match) => match[0].replace(/^\(|\)\s*Tj$/g, "").replace(/\\([()\\])/g, "$1"));
+  return fragments.join(" ").replace(/\s+/g, " ").trim();
+}
+
 function isStage(value: string): value is Stage {
   return stages.includes(value as Stage);
 }
@@ -1585,6 +2127,7 @@ function timestampNow() {
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Asia/Singapore",
   }).format(new Date());
 }
 

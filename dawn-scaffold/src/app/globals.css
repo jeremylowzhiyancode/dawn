@@ -544,7 +544,37 @@ h1 {
   background: rgba(255, 255, 255, 0.72);
   color: #1d252c;
   box-shadow: inset 0 0 0 1px rgba(31, 37, 43, 0.06);
+  cursor: grab;
+}
+
+.sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
   cursor: pointer;
+}
+
+.sort-header:hover,
+.sort-header:focus-visible {
+  color: #ad3825;
+  outline: 0;
+}
+
+.sort-indicator {
+  color: rgba(31, 37, 43, 0.28);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.sort-indicator.active {
+  color: #c94832;
 }
 
 /* Priority is intentionally communicated through scale as well as colour. */
@@ -668,6 +698,7 @@ h1 {
   line-height: 1.2;
   font-weight: 740;
   letter-spacing: -0.01em;
+  cursor: pointer;
 }
 
 .hospital-name:hover {
@@ -688,6 +719,7 @@ h1 {
   align-items: center;
   justify-content: center;
   width: 78px;
+  box-sizing: border-box;
   min-height: 22px;
   border-radius: 999px;
   padding: 0 8px;
@@ -708,6 +740,8 @@ h1 {
   color: hsl(var(--priority-hue) 74% 21%);
   background: hsl(var(--priority-hue) 100% 80%);
   box-shadow: inset 0 0 0 1px hsl(var(--priority-hue) 88% 58%);
+  min-height: 38px;
+  padding: 5px 9px;
 }
 
 .priority-pill.high {
@@ -1142,6 +1176,127 @@ h1 {
   padding: 14px;
 }
 
+.dawn-sidecar.is-focused {
+  position: fixed;
+  z-index: 40;
+  top: 50%;
+  left: 50%;
+  width: min(760px, calc(100vw - 40px));
+  height: min(720px, calc(100vh - 40px));
+  min-height: 0;
+  padding: 24px;
+  transform: translate(-50%, -50%);
+  border-radius: 24px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 0 0 100vmax rgba(14, 22, 31, 0.62), 0 34px 100px rgba(8, 15, 25, 0.42);
+}
+
+.dawn-sidecar.is-focused::before {
+  display: none;
+}
+
+.dawn-sidecar.is-focused::after {
+  inset: 0;
+  border-radius: inherit;
+  background: #ffffff;
+}
+
+.dawn-sidecar.is-focused header {
+  justify-content: space-between;
+}
+
+.dawn-sidecar.is-focused .chat-title h2 {
+  font-size: 23px;
+}
+
+.dawn-sidecar.is-focused .chat-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  gap: 10px;
+  padding: 6px 2px;
+}
+
+.dawn-sidecar.is-focused .chat-message,
+.dawn-sidecar.is-focused .chat-empty {
+  max-width: 82%;
+  padding: 11px 14px;
+  font-size: 15px;
+  line-height: 1.42;
+}
+
+.dawn-sidecar.is-focused .chat-suggestions {
+  flex: 0 1 330px;
+  max-height: 330px;
+  overflow-y: auto;
+  gap: 12px;
+  padding: 0 4px 0 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dawn-sidecar.is-focused .chat-suggestions article {
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f8f7f5;
+  box-shadow: inset 0 0 0 1px rgba(32, 59, 79, 0.1);
+}
+
+.dawn-sidecar.is-focused .chat-suggestion-title b {
+  font-size: 13px;
+}
+
+.dawn-sidecar.is-focused .chat-suggestions textarea {
+  min-height: 64px;
+  padding: 9px 11px;
+  font-size: 14px;
+}
+
+.dawn-sidecar.is-focused .suggestion-diff {
+  grid-template-columns: 64px minmax(0, 1fr);
+  font-size: 12px;
+}
+
+.dawn-sidecar.is-focused .suggestion-diff span {
+  font-size: 10px;
+}
+
+.dawn-sidecar.is-focused .chat-composer {
+  flex: 0 0 auto;
+  min-height: 62px;
+  margin-top: 2px;
+  padding: 9px;
+  border: 1px solid rgba(32, 59, 79, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(32, 59, 79, 0.1);
+}
+
+.dawn-sidecar.is-focused .chat-composer textarea {
+  font-size: 15px;
+}
+
+.chat-focus-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(32, 59, 79, 0.08);
+  color: #334d60;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.chat-focus-close:hover {
+  background: rgba(201, 72, 50, 0.12);
+  color: #a53022;
+}
+
 .dawn-prompt {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
@@ -1272,6 +1427,12 @@ h1 {
   gap: 8px;
 }
 
+.chat-review-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
 .chat-suggestions > header b,
 .chat-suggestions > header small,
 .chat-suggestions article > small {
@@ -1299,6 +1460,24 @@ h1 {
   background: rgba(255, 255, 255, 0.76);
 }
 
+.suggestion-diff {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 2px 6px;
+  margin: 0;
+  color: #56616a;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.suggestion-diff span {
+  color: #9b5a4e;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .chat-suggestion-title {
   justify-content: space-between;
   gap: 6px;
@@ -1320,15 +1499,83 @@ h1 {
   text-transform: capitalize;
 }
 
-.chat-suggestions input {
+.chat-suggestions textarea {
   width: 100%;
+  min-width: 0;
   border: 0;
   border-radius: 8px;
   padding: 7px 8px;
   background: rgba(32, 59, 79, 0.06);
   color: #26323a;
   font-size: 11px;
+  line-height: 1.38;
   outline: 0;
+  resize: vertical;
+}
+
+.suggestion-storage-preview {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid rgba(240, 81, 55, 0.22);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255, 247, 240, 0.94), rgba(255, 255, 255, 0.82));
+}
+
+.suggestion-storage-preview > p {
+  margin: 0;
+  color: #9a3a2d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.suggestion-storage-preview dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.suggestion-storage-preview dl > div {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.46fr) minmax(0, 1fr);
+  gap: 9px;
+  align-items: baseline;
+}
+
+.suggestion-storage-preview dt {
+  color: #805e58;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.suggestion-storage-preview dd {
+  min-width: 0;
+  margin: 0;
+  color: #26323a;
+  font-size: 11px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.suggestion-storage-preview input {
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  border: 1px solid rgba(140, 58, 48, 0.18);
+  border-radius: 7px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #26323a;
+  font: inherit;
+  font-weight: 650;
+  outline: none;
+}
+
+.suggestion-storage-preview input:focus {
+  border-color: #e85c39;
+  box-shadow: 0 0 0 3px rgba(240, 81, 55, 0.14);
 }
 
 .chat-suggestions article > div:last-child {
@@ -1338,7 +1585,8 @@ h1 {
 
 .chat-approve,
 .chat-dismiss,
-.chat-approve-all {
+.chat-approve-all,
+.chat-focus-review {
   min-height: 24px;
   border: 0;
   border-radius: 8px;
@@ -1351,6 +1599,11 @@ h1 {
 .chat-approve-all {
   background: #203b4f;
   color: white;
+}
+
+.chat-focus-review {
+  background: rgba(32, 59, 79, 0.08);
+  color: #334d60;
 }
 
 .chat-dismiss {
@@ -1446,6 +1699,31 @@ h1 {
   border-radius: 18px 18px 18px 4px;
   background: rgba(32, 59, 79, 0.08);
   color: #495660;
+}
+
+.chat-message.assistant:has(.chat-message-open-record) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-message-open-record {
+  display: grid;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: #c84932;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-message-open-record:hover {
+  background: #a93427;
 }
 
 .chat-suggestion-title > div {
@@ -1731,6 +2009,50 @@ h1 {
 .form-section {
   display: grid;
   gap: 12px;
+}
+
+.compact-form-section,
+.compact-contact-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.compact-form-section {
+  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 247, 239, 0.82), rgba(255, 255, 255, 0.8));
+  box-shadow: inset 0 0 0 1px rgba(240, 100, 61, 0.12);
+}
+
+.compact-form-section .wide-field,
+.compact-contact-fields .wide-field {
+  grid-column: 1 / -1;
+}
+
+.compact-form-section label,
+.compact-contact-fields label {
+  gap: 4px;
+}
+
+.compact-form-section label span,
+.compact-contact-fields label span {
+  color: #805e58;
+  font-size: 10px;
+}
+
+.compact-form-section input,
+.compact-form-section select,
+.compact-contact-fields input,
+.compact-contact-fields select {
+  min-height: 36px;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+.compact-form-section textarea {
+  min-height: 72px;
+  border-radius: 10px;
+  padding: 9px 10px;
 }
 
 .form-section label,
@@ -2042,6 +2364,13 @@ h1 {
   display: grid;
   gap: 10px;
   padding-top: 4px;
+}
+
+.contact-details.compact-contact-fields {
+  padding: 10px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(140, 58, 48, 0.1);
 }
 
 .sticky-save {
