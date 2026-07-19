@@ -1,6 +1,8 @@
 "use client";
 
-import { ChangeEvent, KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import JSZip from "jszip";
+import * as XLSX from "xlsx";
 import {
   AuditDrawer as EditableAuditDrawer,
   FileStorageDrawer as EditableFileStorageDrawer,
@@ -14,7 +16,7 @@ export type Awaiting = "us" | "hospital";
 export type Country = "Singapore" | "Malaysia" | "Indonesia" | "Thailand" | "Vietnam";
 export type SortKey = "priority" | "hospital" | "stage" | "nextStep" | "lastInteraction" | "awaiting" | "country";
 export type SortDirection = "asc" | "desc";
-type Priority = "Low" | "Med" | "High" | "Urgent";
+type Priority = "Low" | "Med" | "High" | "Very high" | "Urgent" | "Very urgent";
 type Drawer = "hospital" | "settings" | "new" | "audit" | "files" | null;
 
 export type Contact = {
@@ -67,6 +69,8 @@ export type StoredFile = {
   source: "Dawn AI";
   hospitalId: string;
   hospitalName: string;
+  content?: string;
+  data?: ArrayBuffer;
 };
 
 export type EvidenceItem = {
@@ -108,7 +112,7 @@ export type DawnSettings = {
     awaiting: string;
   };
   visibleColumns: string[];
-  substageLabels: Record<Stage, string>;
+  substageOptions: Record<Stage, string[]>;
 };
 
 type Suggestion = {
@@ -126,17 +130,30 @@ type Suggestion = {
 type ChatMessage = {
   id: string;
   content: string;
+  role: "user" | "assistant";
 };
 
 const today = new Date("2026-07-18T12:00:00+08:00");
+const dawnPrompts = [
+  "What's cooking?",
+  "Got a quick update?",
+  "Busy day? I've got you.",
+  "Tell me the tea.",
+  "Need a hand?",
+  "Let's make this easy.",
+  "What are we tackling?",
+  "Drop me a note.",
+];
+const dashboardGreetings = [
+  "A clearer day ahead.",
+  "Welcome back — let’s keep this going.",
+  "You’ve got this. One good move at a time.",
+  "Let’s make today feel lighter.",
+  "Small wins add up. You’re on it.",
+  "Ready when you are.",
+];
 export const stages: Stage[] = ["Interest", "Kickoff", "Pilot", "Active"];
 export const countries: Country[] = ["Singapore", "Malaysia", "Indonesia", "Thailand", "Vietnam"];
-export const stageSubstages: Record<Stage, string[]> = {
-  Interest: ["Agreements sent", "LOI signed", "EAA signed"],
-  Kickoff: ["Kickoff invited", "Kickoff scheduled", "Kickoff completed"],
-  Pilot: ["Pilot initiated", "Pilot completed"],
-  Active: ["1 month check-in", "2 month check-in", "3 month check-in"],
-};
 export const nextStepOptions = [
   "Send EAA packet",
   "Schedule kickoff",
@@ -203,11 +220,11 @@ const initialSettings: DawnSettings = {
     awaiting: "Awaiting",
   },
   visibleColumns: ["priority", "hospital", "stage", "nextStep", "lastInteraction", "awaiting"],
-  substageLabels: {
-    Interest: "Agreements sent, EAA signed, LOI signed",
-    Kickoff: "Kickoff invited, kickoff scheduled, kickoff completed",
-    Pilot: "Pilot initiated, pilot completed",
-    Active: "1 month check-in, 2 month check-in, 3 month check-in",
+  substageOptions: {
+    Interest: ["Agreements sent", "LOI signed", "EAA signed"],
+    Kickoff: ["Kickoff invited", "Kickoff scheduled", "Kickoff completed"],
+    Pilot: ["Pilot initiated", "Pilot completed"],
+    Active: ["1 month check-in", "2 month check-in", "3 month check-in"],
   },
 };
 
@@ -304,20 +321,95 @@ export default function DawnApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState("<strong>High priority</strong><br>☐ Book kickoff for Northbridge<br>☐ Send EAA packet to Harborview<br>☐ Check pilot form at Redwood");
   const [composer, setComposer] = useState("");
+  const [isNoteOpen, setNoteOpen] = useState(true);
+  const [isNoteMenuOpen, setNoteMenuOpen] = useState(false);
+  const [noteColor, setNoteColor] = useState<"yellow" | "peach" | "pink">("yellow");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isReviewOpen, setReviewOpen] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Hospital[] | null>(null);
   const [isListening, setListening] = useState(false);
   const [isDawnExpanded, setDawnExpanded] = useState(false);
+  const [dawnPromptIndex, setDawnPromptIndex] = useState(0);
+  const [dashboardGreetingIndex, setDashboardGreetingIndex] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState(initialSettings);
-  const [uploadedFiles, setUploadedFiles] = useState<StoredFile[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<StoredFile[]>([
+    {
+      id: "demo-kickoff-note",
+      name: "Northbridge kickoff notes.txt",
+      type: "text/plain",
+      size: 184,
+      uploadedAt: "Jul 18, 2026, 3:10 PM",
+      source: "Dawn AI",
+      hospitalId: "h01",
+      hospitalName: "Northbridge University Hospital",
+      content: "Northbridge kickoff notes\n\n- EAA confirmed\n- Offer two kickoff slots next week\n- Confirm IT attendee\n",
+    },
+  ]);
   const [draggedHospitalId, setDraggedHospitalId] = useState<string | null>(null);
   const [dragOverHospitalId, setDragOverHospitalId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const noteFileInputRef = useRef<HTMLInputElement>(null);
   const noteEditorRef = useRef<HTMLDivElement>(null);
+  const restoreChecklistCaretRef = useRef(false);
+  const dawnPanelRef = useRef<HTMLElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const previousRowPositions = useRef(new Map<string, DOMRect>());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setDawnPromptIndex((current) => {
+        const next = Math.floor(Math.random() * (dawnPrompts.length - 1));
+        return next >= current ? next + 1 : next;
+      });
+    }, 10000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!restoreChecklistCaretRef.current || !noteEditorRef.current) return;
+    const editor = noteEditorRef.current;
+    const newestChecklist = editor.querySelector("label:last-of-type");
+    const textNode = newestChecklist?.lastChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, textNode.textContent?.length ?? 0);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      editor.focus();
+      newestChecklist?.scrollIntoView({ block: "nearest" });
+    }
+    restoreChecklistCaretRef.current = false;
+  }, [note]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setDashboardGreetingIndex((current) => {
+        const next = Math.floor(Math.random() * (dashboardGreetings.length - 1));
+        return next >= current ? next + 1 : next;
+      });
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!note.includes('type="checkbox"')) {
+      setNote('<strong>High priority</strong><br><label><input type="checkbox" /> Book kickoff for Northbridge</label><br><label><input type="checkbox" /> Send EAA packet to Harborview</label><br><label><input type="checkbox" /> Check pilot form at Redwood</label>');
+    }
+  }, []);
+
+  useEffect(() => {
+    function collapseUntouchedDawn(event: MouseEvent) {
+      const target = event.target as Node;
+      if (isDawnExpanded && !chatMessages.length && !composer.trim() && !dawnPanelRef.current?.contains(target)) {
+        setDawnExpanded(false);
+      }
+    }
+    document.addEventListener("mousedown", collapseUntouchedDawn);
+    return () => document.removeEventListener("mousedown", collapseUntouchedDawn);
+  }, [chatMessages.length, composer, isDawnExpanded]);
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -378,7 +470,7 @@ export default function DawnApp() {
     if (noteEditorRef.current) setNote(noteEditorRef.current.innerHTML);
   }
 
-  function formatNote(command: "bold" | "italic" | "insertUnorderedList") {
+  function formatNote(command: "bold" | "italic" | "underline" | "strikeThrough" | "insertUnorderedList") {
     noteEditorRef.current?.focus();
     document.execCommand(command);
     updateNoteFromEditor();
@@ -390,12 +482,35 @@ export default function DawnApp() {
     updateNoteFromEditor();
   }
 
+  function createNewNote() {
+    setNote("");
+    setNoteMenuOpen(false);
+    window.setTimeout(() => noteEditorRef.current?.focus(), 0);
+  }
+
+  function addChecklistItem() {
+    noteEditorRef.current?.focus();
+    document.execCommand("insertHTML", false, '<br><label><input type="checkbox" /> </label>');
+    restoreChecklistCaretRef.current = true;
+    updateNoteFromEditor();
+  }
+
+  function insertNoteImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file?.type.startsWith("image/")) return;
+    noteEditorRef.current?.focus();
+    document.execCommand("insertImage", false, URL.createObjectURL(file));
+    updateNoteFromEditor();
+    event.target.value = "";
+  }
+
   function handleStage(stage: Stage | "All") {
     setActiveStage(stage);
     setPage(1);
   }
 
   function adjustPriority(hospital: Hospital, direction: 1 | -1) {
+    setLastSnapshot(hospitals);
     setHospitals((current) =>
       current.map((item) =>
         item.id === hospital.id
@@ -420,6 +535,8 @@ export default function DawnApp() {
 
   function placeBelow(hospitalId: string) {
     if (!draggedHospitalId || draggedHospitalId === hospitalId) return;
+
+    setLastSnapshot(hospitals);
 
     setHospitals((current) => {
       const draggedHospital = current.find((hospital) => hospital.id === draggedHospitalId);
@@ -454,23 +571,31 @@ export default function DawnApp() {
     const text = composer.trim();
     if (!text) return;
 
-    recordChatMessage(text);
+    recordChatMessage(text, "user");
     setDawnExpanded(true);
 
     if (/export|excel|download/i.test(text)) {
-      exportCsv(hospitals);
+      void exportAllArchive(hospitals, uploadedFiles);
+      recordChatMessage("I prepared the export. Your hospital records have not been changed.", "assistant");
       setComposer("");
       return;
     }
 
-    setSuggestions(createSuggestions(text, hospitals));
+    const nextSuggestions = createSuggestions(text, hospitals);
+    setSuggestions(nextSuggestions);
+    recordChatMessage(
+      nextSuggestions.length
+        ? `Okay, noted. It sounds like you want to update ${nextSuggestions.map((suggestion) => `${suggestion.hospitalName}'s ${suggestion.field}`).join(" and ")}. I’ve prepared ${nextSuggestions.length === 1 ? "the change" : "the changes"} below for your approval.`
+        : "Okay, noted. I couldn’t safely identify a record to change, so I’ve left everything unchanged.",
+      "assistant",
+    );
     setComposer("");
   }
 
-  function recordChatMessage(content: string) {
+  function recordChatMessage(content: string, role: ChatMessage["role"] = "user") {
     setChatMessages((current) => {
-      if (current[current.length - 1]?.content === content) return current;
-      return [...current, { id: `chat-${Date.now()}`, content }];
+      if (current[current.length - 1]?.content === content && current[current.length - 1]?.role === role) return current;
+      return [...current, { id: `chat-${Date.now()}-${role}-${current.length}`, content, role }];
     });
   }
 
@@ -512,11 +637,12 @@ export default function DawnApp() {
     );
   }
 
-  function handleFile(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     const hospital = inferAttachmentHospital(file.name);
     if (!hospital) return;
+    const data = await file.arrayBuffer();
     const kind = file.type.startsWith("image/") ? "image" : "file";
     const interaction: EvidenceItem = {
       id: `interaction-${Date.now()}`,
@@ -536,6 +662,7 @@ export default function DawnApp() {
         source: "Dawn AI",
         hospitalId: hospital.id,
         hospitalName: hospital.name,
+        data,
       },
       ...current,
     ]);
@@ -543,6 +670,22 @@ export default function DawnApp() {
     setDawnExpanded(true);
     setSuggestions(createSuggestions(`Uploaded file: ${file.name} for ${hospital.name}`, hospitals, file.name));
     event.target.value = "";
+  }
+
+  function downloadStoredFile(file: StoredFile) {
+    downloadBlob(new Blob([file.data ?? file.content ?? `File: ${file.name}\nStored in Dawn for ${file.hospitalName}.`], { type: file.type || "text/plain" }), file.name);
+  }
+
+  async function downloadAllFiles() {
+    const zip = new JSZip();
+    uploadedFiles.forEach((file) => {
+      zip.folder(safeFileName(file.hospitalName))?.file(file.name, file.data ?? file.content ?? `File: ${file.name}\nStored in Dawn for ${file.hospitalName}.`);
+    });
+    downloadBlob(await zip.generateAsync({ type: "blob" }), "dawn-file-archive.zip");
+  }
+
+  function deleteStoredFile(id: string) {
+    setUploadedFiles((current) => current.filter((file) => file.id !== id));
   }
 
   function toggleMic() {
@@ -605,13 +748,13 @@ export default function DawnApp() {
     setLastSnapshot(hospitals);
     setHospitals((current) => applySuggestion(current, suggestion));
     dismissSuggestion(suggestion.id);
-    recordChatMessage(`Approved: ${suggestion.hospitalName} — ${suggestion.field} updated.`);
+    recordChatMessage(`Done — ${suggestion.hospitalName}'s ${suggestion.field} is now updated.`, "assistant");
   }
 
   function approveAll() {
     setLastSnapshot(hospitals);
     setHospitals((current) => suggestions.reduce(applySuggestion, current));
-    recordChatMessage(`Approved ${suggestions.length} suggested update${suggestions.length === 1 ? "" : "s"}.`);
+    recordChatMessage(`Done — I applied ${suggestions.length} approved update${suggestions.length === 1 ? "" : "s"}.`, "assistant");
     setSuggestions([]);
     setReviewOpen(false);
   }
@@ -623,6 +766,7 @@ export default function DawnApp() {
   }
 
   function saveHospital(nextHospital: Hospital) {
+    setLastSnapshot(hospitals);
     const previous = hospitals.find((hospital) => hospital.id === nextHospital.id);
     const changes = previous ? describeHospitalChanges(previous, nextHospital) : ["Created hospital record"];
     const auditedHospital = {
@@ -648,22 +792,17 @@ export default function DawnApp() {
   }
 
   function createNewHospital(draft: Hospital) {
-    const created = {
-      ...draft,
-      audit: [
-        {
-          id: `audit-${Date.now()}`,
-          at: timestampNow(),
-          by: "Demo user",
-          action: "Created hospital record",
-          source: "Manual new-org rail",
-        },
-        ...draft.audit,
-      ],
-    };
-    setHospitals((current) => [created, ...current]);
-    setSelectedId(created.id);
+    setLastSnapshot(hospitals);
+    setHospitals((current) => [draft, ...current]);
+    setSelectedId(draft.id);
     setDrawer("hospital");
+  }
+
+  function deleteHospital(id: string) {
+    setLastSnapshot(hospitals);
+    setHospitals((current) => current.filter((hospital) => hospital.id !== id));
+    setSelectedId(null);
+    setDrawer(null);
   }
 
   return (
@@ -683,7 +822,7 @@ export default function DawnApp() {
               Undo
             </button>
           ) : null}
-          <button className="icon-button" aria-label="Audit trail" onClick={() => setDrawer("audit")}>
+          <button className="icon-button" aria-label="Activity" onClick={() => setDrawer("audit")}>
             <HistoryIcon />
           </button>
           <button className="icon-button" aria-label="File storage" onClick={() => setDrawer("files")}>
@@ -692,7 +831,7 @@ export default function DawnApp() {
           <button className="icon-button" aria-label="Settings" onClick={() => setDrawer("settings")}>
             <SettingsIcon />
           </button>
-          <button className="icon-button" aria-label="Export to Excel" onClick={() => exportCsv(hospitals)}>
+          <button className="icon-button" aria-label="Export all Dawn data and files" title="Export all data and files" onClick={() => void exportAllArchive(hospitals, uploadedFiles)}>
             <DownloadIcon />
           </button>
           <button className="icon-button" aria-label="Logout">
@@ -705,7 +844,7 @@ export default function DawnApp() {
         <section className="main-panel" aria-label="Onboard dashboard">
           <div className="panel-header">
             <div>
-              <h1>Hospital onboarding</h1>
+              <h1 key={dashboardGreetingIndex} className="dashboard-greeting">{dashboardGreetings[dashboardGreetingIndex]}</h1>
             </div>
           </div>
 
@@ -775,7 +914,7 @@ export default function DawnApp() {
               const awaitingContact = hospital.awaiting === "hospital" ? contactAwaiting(hospital) : null;
               return (
               <div
-                className={`table-row data-row ${dragOverHospitalId === hospital.id ? "is-drag-target" : ""}`}
+                className={`table-row data-row priority-${priority.toLowerCase().replaceAll(" ", "-")} ${dragOverHospitalId === hospital.id ? "is-drag-target" : ""}`}
                 role="row"
                 key={hospital.id}
                 onClick={() => openHospital(hospital)}
@@ -804,7 +943,7 @@ export default function DawnApp() {
               >
                 <div role="cell" className="priority-cell">
                   <span
-                    className={`priority-pill ${priority.toLowerCase()}`}
+                    className={`priority-pill ${priority.toLowerCase().replaceAll(" ", "-")}`}
                     style={{ "--priority-hue": priorityHue(hospital) } as React.CSSProperties}
                   >
                     {priority}
@@ -840,7 +979,7 @@ export default function DawnApp() {
                   </button>
                 </div>
                 <div role="cell">
-                  <span className="stage-pill">{hospital.stage}</span>
+                  <span className={`stage-pill stage-${hospital.stage.toLowerCase()}`}>{hospital.stage}</span>
                   <span className="substage">{hospital.substage}</span>
                 </div>
                 <div role="cell" className="next-step">
@@ -875,42 +1014,67 @@ export default function DawnApp() {
         </section>
 
         <aside className="right-rail" aria-label="Notes and Dawn">
-          <section className="note-panel" aria-label="Quick note">
+          {isNoteOpen ? <section className={`note-panel note-${noteColor}`} aria-label="Quick note">
+          <div className="note-topbar">
+            <button type="button" aria-label="New note" onClick={createNewNote}>+</button>
+            <div className="note-menu-wrap">
+              <button type="button" aria-label="Note options" onClick={() => setNoteMenuOpen((current) => !current)}>•••</button>
+              {isNoteMenuOpen ? <div className="note-menu" role="menu">
+                {(["yellow", "peach", "pink"] as const).map((color) => <button key={color} type="button" onClick={() => { setNoteColor(color); setNoteMenuOpen(false); }}>{color}</button>)}
+              </div> : null}
+            </div>
+            <button type="button" aria-label="Close note" onClick={() => setNoteOpen(false)}>×</button>
+          </div>
           <div className="note-toolbar">
             <button type="button" aria-label="Bold note text" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("bold")}>B</button>
             <button type="button" aria-label="Italic note text" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("italic")}>I</button>
+            <button type="button" aria-label="Underline note text" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("underline")}>U</button>
+            <button type="button" aria-label="Strike through note text" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("strikeThrough")}>S</button>
             <button type="button" aria-label="Checklist" onMouseDown={(event) => event.preventDefault()} onClick={insertChecklistItem}>☑</button>
             <button type="button" aria-label="Bullets" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("insertUnorderedList")}>•</button>
+            <input ref={noteFileInputRef} type="file" accept="image/*" className="sr-only" onChange={insertNoteImage} />
+            <button type="button" aria-label="Add image to note" onClick={() => noteFileInputRef.current?.click()}>▧</button>
           </div>
             <div
               ref={noteEditorRef}
               className="note-editor"
               contentEditable
+              dir="ltr"
               suppressContentEditableWarning
               role="textbox"
               aria-label="Quick note editor"
               onInput={updateNoteFromEditor}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addChecklistItem();
+                }
+              }}
+              onClick={(event) => {
+                const target = event.target as HTMLInputElement;
+                if (target.type === "checkbox") {
+                  if (target.checked) target.setAttribute("checked", "checked");
+                  else target.removeAttribute("checked");
+                  updateNoteFromEditor();
+                }
+              }}
               dangerouslySetInnerHTML={{ __html: note }}
             />
-          </section>
+          </section> : <button className="open-note" type="button" onClick={() => setNoteOpen(true)}>Open note</button>}
 
-          <section className={`dawn-sidecar ${isDawnExpanded ? "is-expanded" : ""}`} aria-label="Ask Dawn">
+          <section ref={dawnPanelRef} className={`dawn-sidecar ${isDawnExpanded ? "is-expanded" : ""}`} aria-label="Ask Dawn">
             {isDawnExpanded ? (
               <>
                 <header>
                   <div className="chat-title">
-                    <DawnLogo />
-                    <div>
-                      <h2>Ask Dawn</h2>
-                      <span>Voice notes, files, and updates stay here.</span>
-                    </div>
+                    <h2>Ask Dawn</h2>
                   </div>
                 </header>
                 <div className="chat-thread" aria-live="polite">
                   {chatMessages.length ? (
-                    chatMessages.map((message) => <p className="chat-message" key={message.id}>{message.content}</p>)
+                    chatMessages.map((message) => <p className={`chat-message ${message.role}`} key={message.id}>{message.content}</p>)
                   ) : (
-                    <p className="chat-empty">Use the microphone for a voice note, or type a quick update.</p>
+                    <p className="chat-empty">Use the microphone for a voice note, type a quick update, or drop a file. Dawn will do the rest.</p>
                   )}
                 </div>
                 {suggestions.length ? (
@@ -926,7 +1090,20 @@ export default function DawnApp() {
                       <article key={suggestion.id}>
                         <div className="chat-suggestion-title">
                           <b>{suggestion.hospitalName}</b>
-                          <span>{suggestion.field}</span>
+                          <div>
+                            <span>{suggestion.field}</span>
+                            <button
+                              className="open-hospital-button"
+                              aria-label={`Open ${suggestion.hospitalName}`}
+                              title={`Open ${suggestion.hospitalName}`}
+                              onClick={() => {
+                                const hospital = hospitals.find((item) => item.id === suggestion.hospitalId);
+                                if (hospital) openHospital(hospital);
+                              }}
+                            >
+                              ↗
+                            </button>
+                          </div>
                         </div>
                         <input
                           aria-label={`Suggested ${suggestion.field} for ${suggestion.hospitalName}`}
@@ -947,11 +1124,19 @@ export default function DawnApp() {
                   <button className={`mic-button ${isListening ? "is-listening" : ""}`} aria-label="Talk to Dawn" onClick={toggleMic}>
                     <MicIcon />
                   </button>
-                  <input
+                  <textarea
+                    rows={1}
                     value={composer}
-                    onChange={(event) => setComposer(event.target.value)}
-                    onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                      if (event.key === "Enter") handleComposerSend();
+                    onChange={(event) => {
+                      setComposer(event.target.value);
+                      event.currentTarget.style.height = "auto";
+                      event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 94)}px`;
+                    }}
+                    onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        handleComposerSend();
+                      }
                     }}
                     placeholder="Speak or type an update"
                   />
@@ -959,16 +1144,13 @@ export default function DawnApp() {
                   <button className="composer-icon" aria-label="Attach file" onClick={() => fileInputRef.current?.click()}>
                     <PaperclipIcon />
                   </button>
-                  <button className="send-button" aria-label="Send to Dawn" onClick={handleComposerSend}>
-                    <ArrowUpIcon />
-                  </button>
                 </section>
               </>
             ) : (
               <button className="dawn-prompt" type="button" onClick={() => setDawnExpanded(true)} aria-expanded={false}>
                 <span className="dawn-prompt-mic" aria-hidden="true"><MicIcon /></span>
                 <span>
-                  <b>How can Dawn help?</b>
+                  <b>{dawnPrompts[dawnPromptIndex]}</b>
                 </span>
               </button>
             )}
@@ -1000,12 +1182,16 @@ export default function DawnApp() {
                 saveHospital(nextHospital);
                 setDrawer(null);
               }}
+              onDelete={deleteHospital}
+              canUndo={Boolean(lastSnapshot)}
+              onUndo={undoLastApproval}
+              substageOptions={settings.substageOptions}
             />
           ) : null}
           {drawer === "settings" ? <EditableSettingsDrawer settings={settings} onSave={setSettings} /> : null}
           {drawer === "audit" ? <EditableAuditDrawer hospitals={hospitals} /> : null}
-          {drawer === "files" ? <EditableFileStorageDrawer files={uploadedFiles} /> : null}
-          {drawer === "new" ? <EditableNewHospitalDrawer onCreate={createNewHospital} /> : null}
+          {drawer === "files" ? <EditableFileStorageDrawer files={uploadedFiles} onDownload={downloadStoredFile} onDownloadAll={downloadAllFiles} onDelete={deleteStoredFile} /> : null}
+          {drawer === "new" ? <EditableNewHospitalDrawer onCreate={createNewHospital} substageOptions={settings.substageOptions} /> : null}
         </DrawerShell>
       ) : null}
     </main>
@@ -1226,7 +1412,7 @@ function HospitalDetail({ hospital }: { hospital: Hospital }) {
         ))}
       </section>
       <section>
-        <h3>Audit trail</h3>
+        <h3>Activity</h3>
         {hospital.audit.map((entry) => (
           <div className="detail-row" key={entry.id}>
             <b>{entry.action}</b>
@@ -1357,7 +1543,9 @@ function priorityScore(hospital: Hospital) {
 
 function priorityFor(hospital: Hospital): Priority {
   const score = priorityScore(hospital);
+  if (score >= 90) return "Very urgent";
   if (score >= 78) return "Urgent";
+  if (score >= 66) return "Very high";
   if (score >= 57) return "High";
   if (score >= 34) return "Med";
   return "Low";
@@ -1387,7 +1575,7 @@ function isStage(value: string): value is Stage {
 function drawerTitle(drawer: Drawer, hospital: Hospital | null) {
   if (drawer === "hospital") return hospital?.name ?? "Hospital detail";
   if (drawer === "settings") return "Settings";
-  if (drawer === "audit") return "Audit trail";
+  if (drawer === "audit") return "Activity";
   if (drawer === "files") return "File storage";
   if (drawer === "new") return "New hospital";
   return "";
@@ -1429,26 +1617,45 @@ function describeHospitalChanges(previous: Hospital, next: Hospital) {
   return changes;
 }
 
-function exportCsv(hospitals: Hospital[]) {
-  const header = ["Hospital", "Country", "Stage", "Substage", "Next step", "Last interaction", "Awaiting", "Notes"];
-  const rows = hospitals.map((hospital) => [
-    hospital.name,
-    hospital.country,
-    hospital.stage,
-    hospital.substage,
-    hospital.nextStep,
-    hospital.lastInteraction,
-    hospital.awaiting,
-    hospital.notes,
-  ]);
-  const csv = [header, ...rows].map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "dawn-hospital-activation.csv";
+  link.download = name;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function safeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, "-").trim() || "Unassigned";
+}
+
+function createWorkbook(hospitals: Hospital[], files: StoredFile[]) {
+  const workbook = XLSX.utils.book_new();
+  const sheets: Array<[string, Record<string, unknown>[]]> = [
+    ["Hospitals", hospitals.map((hospital) => ({
+      Hospital: hospital.name, Country: hospital.country, Stage: hospital.stage, Substage: hospital.substage,
+      "Next step": hospital.nextStep, "Last interaction date": hospital.lastInteractionAt, "Last interaction": hospital.lastInteraction,
+      Awaiting: hospital.awaiting === "us" ? "Jeremy" : hospital.contacts.find((contact) => contact.id === hospital.awaitingContactId)?.name ?? "Hospital contact",
+      Notes: hospital.notes,
+    }))],
+    ["Contacts", hospitals.flatMap((hospital) => hospital.contacts.map((contact) => ({ Hospital: hospital.name, Name: contact.name, Title: contact.title, Department: contact.department, Email: contact.email })))],
+    ["Interactions", hospitals.flatMap((hospital) => hospital.evidence.map((item) => ({ Hospital: hospital.name, Title: item.label, Date: item.at, Type: item.kind ?? "note", Details: item.text })))],
+    ["Activity", hospitals.flatMap((hospital) => hospital.audit.map((item) => ({ Hospital: hospital.name, Date: item.at, By: item.by, Action: item.action, Source: item.source })))],
+    ["Stage history", hospitals.flatMap((hospital) => hospital.stageHistory.map((item) => ({ Hospital: hospital.name, Entry: item })))],
+    ["Files", files.map((file) => ({ File: file.name, Hospital: file.hospitalName, Type: file.type, Bytes: file.size, Uploaded: file.uploadedAt, Source: file.source }))],
+  ];
+  sheets.forEach(([name, rows]) => XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), name));
+  return XLSX.write(workbook, { bookType: "xlsx", type: "array", compression: true });
+}
+
+async function exportAllArchive(hospitals: Hospital[], files: StoredFile[]) {
+  const zip = new JSZip();
+  zip.file("dawn-structured-data.xlsx", createWorkbook(hospitals, files));
+  files.forEach((file) => {
+    zip.folder(`attachments/${safeFileName(file.hospitalName)}`)?.file(file.name, file.data ?? file.content ?? `File: ${file.name}\nStored in Dawn for ${file.hospitalName}.`);
+  });
+  downloadBlob(await zip.generateAsync({ type: "blob" }), "dawn-export.zip");
 }
 
 type SpeechRecognitionEventLike = {
