@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, KeyboardEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AuditDrawer as EditableAuditDrawer,
   FileStorageDrawer as EditableFileStorageDrawer,
@@ -12,9 +12,9 @@ import {
 export type Stage = "Interest" | "Kickoff" | "Pilot" | "Active";
 export type Awaiting = "us" | "hospital";
 export type Country = "Singapore" | "Malaysia" | "Indonesia" | "Thailand" | "Vietnam";
-export type SortKey = "status" | "hospital" | "stage" | "nextStep" | "lastInteraction" | "awaiting" | "country";
+export type SortKey = "priority" | "hospital" | "stage" | "nextStep" | "lastInteraction" | "awaiting" | "country";
 export type SortDirection = "asc" | "desc";
-type Signal = "critical" | "cold" | "warm" | "bright";
+type Priority = "Low" | "Med" | "High" | "Urgent";
 type Drawer = "hospital" | "settings" | "new" | "audit" | "files" | null;
 
 export type Contact = {
@@ -58,11 +58,23 @@ export type AuditEntry = {
   source: string;
 };
 
+export type StoredFile = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  uploadedAt: string;
+  source: "Dawn AI";
+  hospitalId: string;
+  hospitalName: string;
+};
+
 export type EvidenceItem = {
   id: string;
   label: string;
   text: string;
   at: string;
+  kind?: "note" | "voice" | "file" | "image";
 };
 
 export type Hospital = {
@@ -75,6 +87,7 @@ export type Hospital = {
   lastInteractionAt: string;
   lastInteraction: string;
   awaiting: Awaiting;
+  priorityAdjustment: number;
   awaitingContactId: string;
   notes: string;
   contacts: Contact[];
@@ -87,7 +100,7 @@ export type DawnSettings = {
   aiModel: string;
   systemPrompt: string;
   fieldLabels: {
-    status: string;
+    priority: string;
     hospital: string;
     stage: string;
     nextStep: string;
@@ -110,11 +123,16 @@ type Suggestion = {
   conflict?: string;
 };
 
+type ChatMessage = {
+  id: string;
+  content: string;
+};
+
 const today = new Date("2026-07-18T12:00:00+08:00");
 export const stages: Stage[] = ["Interest", "Kickoff", "Pilot", "Active"];
 export const countries: Country[] = ["Singapore", "Malaysia", "Indonesia", "Thailand", "Vietnam"];
 export const stageSubstages: Record<Stage, string[]> = {
-  Interest: ["Agreements sent", "EAA signed", "LOI signed"],
+  Interest: ["Agreements sent", "LOI signed", "EAA signed"],
   Kickoff: ["Kickoff invited", "Kickoff scheduled", "Kickoff completed"],
   Pilot: ["Pilot initiated", "Pilot completed"],
   Active: ["1 month check-in", "2 month check-in", "3 month check-in"],
@@ -129,7 +147,7 @@ export const nextStepOptions = [
   "Send polite reminder",
   "Schedule monthly check-in",
   "Collect usage feedback",
-  "Other",
+  "Other, please specify",
 ];
 const stageThresholds: Record<Stage, number> = {
   Interest: 14,
@@ -173,18 +191,18 @@ const syntheticContactNames = [
 ];
 
 const initialSettings: DawnSettings = {
-  aiModel: "Budget small model",
+  aiModel: "Demo mode — no API cost",
   systemPrompt:
     "You are Dawn AI, a hospital site activation assistant for a tiny startup. Parse messy notes into suggested hospital, contact, stage, next-step, date, notes, and awaiting-who updates. Never update records automatically. Always show evidence, confidence, duplicate/conflict checks, and require human approval.",
   fieldLabels: {
-    status: "Status",
+    priority: "Priority",
     hospital: "Hospital",
     stage: "Stage",
     nextStep: "Next step",
     lastInteraction: "Last interaction",
     awaiting: "Awaiting",
   },
-  visibleColumns: ["status", "hospital", "stage", "nextStep", "lastInteraction", "awaiting"],
+  visibleColumns: ["priority", "hospital", "stage", "nextStep", "lastInteraction", "awaiting"],
   substageLabels: {
     Interest: "Agreements sent, EAA signed, LOI signed",
     Kickoff: "Kickoff invited, kickoff scheduled, kickoff completed",
@@ -204,17 +222,7 @@ const initialHospitals: Hospital[] = [
   createHospital("h08", "Summit Point Hospital", "Malaysia", "Pilot", "Kickoff completed", "Confirm pilot readiness", "2026-07-03", "Kickoff completed with coordinator", "hospital", "Waiting for available feasibility"),
   createHospital("h09", "Lakeside Academic Health", "Indonesia", "Interest", "EAA signed", "Schedule kickoff", "2026-07-08", "Admin confirmed EAA completion", "us", "No kickoff slot proposed"),
   createHospital("h10", "Orchard Park Clinic", "Thailand", "Active", "2 month check-in", "Schedule monthly check-in", "2026-07-16", "Champion reported smooth usage", "us", "No notes"),
-  createHospital("h11", "Pinecrest Hospital", "Vietnam", "Interest", "Agreements sent", "Send polite reminder", "2026-07-11", "Intro email sent to admin team", "hospital", "Unknown legal owner"),
-  createHospital("h12", "Bluewater Medical Campus", "Singapore", "Kickoff", "Kickoff scheduled", "Prepare kickoff deck", "2026-07-09", "Kickoff confirmed by coordinator", "us", "Agenda not sent"),
-  createHospital("h13", "Redwood Clinical Center", "Malaysia", "Pilot", "Pilot initiated", "Check feasibility completion", "2026-06-27", "PI asked about feasibility workflow", "hospital", "Waiting for PI response"),
-  createHospital("h14", "Westhaven Health System", "Indonesia", "Interest", "LOI signed", "Send EAA packet", "2026-07-14", "Director returned signed LOI", "us", "No notes"),
-  createHospital("h15", "Brightfield Hospital", "Thailand", "Kickoff", "Kickoff invited", "Send polite reminder", "2026-07-12", "Kickoff invite sent", "hospital", "Waiting for coordinator"),
-  createHospital("h16", "Riverbend Research Site", "Vietnam", "Pilot", "Pilot completed", "Schedule monthly check-in", "2026-07-10", "First feasibility submitted", "us", "No notes"),
-  createHospital("h17", "Horizon City Hospital", "Singapore", "Interest", "EAA signed", "Schedule kickoff", "2026-06-18", "EAA confirmed complete", "us", "Hospital has waited too long"),
-  createHospital("h18", "Stonegate Medical", "Malaysia", "Active", "3 month check-in", "Collect usage feedback", "2026-07-13", "Second check-in completed", "us", "Minor training request"),
-  createHospital("h19", "Meadowbrook Institute", "Indonesia", "Kickoff", "Kickoff completed", "Confirm pilot readiness", "2026-06-30", "Kickoff completed with ops team", "hospital", "Waiting for feasibility opportunity"),
-  createHospital("h20", "Clearwater Regional", "Thailand", "Pilot", "Pilot initiated", "Check feasibility completion", "2026-07-06", "Pilot started with coordinator", "hospital", "Waiting for site update"),
-];
+].map(addDemoInteractions);
 
 function createHospital(
   id: string,
@@ -240,6 +248,7 @@ function createHospital(
     lastInteractionAt,
     lastInteraction,
     awaiting,
+    priorityAdjustment: 0,
     awaitingContactId: `${id}-c1`,
     notes,
     contacts: [
@@ -293,14 +302,22 @@ export default function DawnApp() {
   const [page, setPage] = useState(1);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [note, setNote] = useState("High priority\n- Book kickoff for Northbridge\n- Send EAA packet to Harborview\n- Check pilot form at Redwood");
+  const [note, setNote] = useState("<strong>High priority</strong><br>☐ Book kickoff for Northbridge<br>☐ Send EAA packet to Harborview<br>☐ Check pilot form at Redwood");
   const [composer, setComposer] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isReviewOpen, setReviewOpen] = useState(false);
   const [lastSnapshot, setLastSnapshot] = useState<Hospital[] | null>(null);
   const [isListening, setListening] = useState(false);
+  const [isDawnExpanded, setDawnExpanded] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState(initialSettings);
+  const [uploadedFiles, setUploadedFiles] = useState<StoredFile[]>([]);
+  const [draggedHospitalId, setDraggedHospitalId] = useState<string | null>(null);
+  const [dragOverHospitalId, setDragOverHospitalId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const noteEditorRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const previousRowPositions = useRef(new Map<string, DOMRect>());
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -317,16 +334,60 @@ export default function DawnApp() {
           hospital.lastInteraction,
         ].some((value) => value.toLowerCase().includes(search));
       })
-      .sort((a, b) => urgencyScore(b) - urgencyScore(a));
+      .sort((a, b) => priorityScore(b) - priorityScore(a));
   }, [activeStage, hospitals, query]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / 10));
   const visibleHospitals = filtered.slice((page - 1) * 10, page * 10);
   const selectedHospital = hospitals.find((hospital) => hospital.id === selectedId) ?? null;
 
+  useLayoutEffect(() => {
+    const nextPositions = new Map<string, DOMRect>();
+    rowRefs.current.forEach((element, id) => {
+      const nextPosition = element.getBoundingClientRect();
+      const previousPosition = previousRowPositions.current.get(id);
+      if (previousPosition) {
+        const distance = previousPosition.top - nextPosition.top;
+        if (Math.abs(distance) > 2) {
+          element.animate(
+            [
+              { transform: `translateY(${distance}px)`, boxShadow: "0 20px 44px rgba(240, 100, 61, 0.28)" },
+              { transform: "translateY(0)", boxShadow: "0 0 0 rgba(240, 100, 61, 0)" },
+            ],
+            { duration: 460, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          );
+        }
+      }
+      nextPositions.set(id, nextPosition);
+    });
+    previousRowPositions.current = nextPositions;
+  }, [visibleHospitals]);
+
   function openHospital(hospital: Hospital) {
     setSelectedId(hospital.id);
     setDrawer("hospital");
+  }
+
+  function renameHospital(id: string, name: string) {
+    setHospitals((current) =>
+      current.map((hospital) => (hospital.id === id ? { ...hospital, name } : hospital)),
+    );
+  }
+
+  function updateNoteFromEditor() {
+    if (noteEditorRef.current) setNote(noteEditorRef.current.innerHTML);
+  }
+
+  function formatNote(command: "bold" | "italic" | "insertUnorderedList") {
+    noteEditorRef.current?.focus();
+    document.execCommand(command);
+    updateNoteFromEditor();
+  }
+
+  function insertChecklistItem() {
+    noteEditorRef.current?.focus();
+    document.execCommand("insertText", false, "☐ ");
+    updateNoteFromEditor();
   }
 
   function handleStage(stage: Stage | "All") {
@@ -334,9 +395,90 @@ export default function DawnApp() {
     setPage(1);
   }
 
+  function adjustPriority(hospital: Hospital, direction: 1 | -1) {
+    setHospitals((current) =>
+      current.map((item) =>
+        item.id === hospital.id
+          ? {
+              ...item,
+              priorityAdjustment: Math.max(-60, Math.min(60, item.priorityAdjustment + direction * 20)),
+              audit: [
+                {
+                  id: `audit-${Date.now()}`,
+                  at: timestampNow(),
+                  by: "Demo user",
+                  action: `Moved priority ${direction === 1 ? "up" : "down"}`,
+                  source: "Manual priority control",
+                },
+                ...item.audit,
+              ],
+            }
+          : item,
+      ),
+    );
+  }
+
+  function quickUpdateHospital(id: string, changes: Partial<Hospital>, action: string) {
+    setHospitals((current) =>
+      current.map((hospital) =>
+        hospital.id === id
+          ? {
+              ...hospital,
+              ...changes,
+              audit: [
+                {
+                  id: `audit-${Date.now()}`,
+                  at: timestampNow(),
+                  by: "Demo user",
+                  action,
+                  source: "Hover quick edit",
+                },
+                ...hospital.audit,
+              ],
+            }
+          : hospital,
+      ),
+    );
+  }
+
+  function placeBelow(hospitalId: string) {
+    if (!draggedHospitalId || draggedHospitalId === hospitalId) return;
+
+    setHospitals((current) => {
+      const draggedHospital = current.find((hospital) => hospital.id === draggedHospitalId);
+      const targetHospital = current.find((hospital) => hospital.id === hospitalId);
+      if (!draggedHospital || !targetHospital) return current;
+
+      const nextAdjustment = priorityScore(targetHospital) - 1 - suggestedPriorityScore(draggedHospital);
+      return current.map((hospital) =>
+        hospital.id === draggedHospital.id
+          ? {
+              ...hospital,
+              priorityAdjustment: nextAdjustment,
+              audit: [
+                {
+                  id: `audit-${Date.now()}`,
+                  at: timestampNow(),
+                  by: "Demo user",
+                  action: `Placed below ${targetHospital.name} in priority order`,
+                  source: "Manual drag priority",
+                },
+                ...hospital.audit,
+              ],
+            }
+          : hospital,
+      );
+    });
+    setDraggedHospitalId(null);
+    setDragOverHospitalId(null);
+  }
+
   function handleComposerSend() {
     const text = composer.trim();
     if (!text) return;
+
+    recordChatMessage(text);
+    setDawnExpanded(true);
 
     if (/export|excel|download/i.test(text)) {
       exportCsv(hospitals);
@@ -345,15 +487,84 @@ export default function DawnApp() {
     }
 
     setSuggestions(createSuggestions(text, hospitals));
-    setReviewOpen(true);
     setComposer("");
+  }
+
+  function recordChatMessage(content: string) {
+    setChatMessages((current) => {
+      if (current[current.length - 1]?.content === content) return current;
+      return [...current, { id: `chat-${Date.now()}`, content }];
+    });
+  }
+
+  function inferAttachmentHospital(signal: string) {
+    const selectedHospital = hospitals.find((hospital) => hospital.id === selectedId);
+    if (selectedHospital) return selectedHospital;
+
+    const normalizedSignal = signal.toLowerCase();
+    const namedHospital = hospitals.find((hospital) =>
+      hospital.name
+        .toLowerCase()
+        .split(/[^a-z]+/)
+        .filter((word) => word.length >= 5)
+        .some((word) => normalizedSignal.includes(word)),
+    );
+    return namedHospital ?? [...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a))[0];
+  }
+
+  function attachInteraction(hospitalId: string, interaction: EvidenceItem) {
+    setHospitals((current) =>
+      current.map((hospital) =>
+        hospital.id === hospitalId
+          ? {
+              ...hospital,
+              evidence: [interaction, ...hospital.evidence],
+              audit: [
+                {
+                  id: `audit-${interaction.id}`,
+                  at: timestampNow(),
+                  by: "Demo user",
+                  action: `Attached ${interaction.kind === "voice" ? "voice note" : interaction.label}`,
+                  source: "Dawn AI",
+                },
+                ...hospital.audit,
+              ],
+            }
+          : hospital,
+      ),
+    );
   }
 
   function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    setSuggestions(createSuggestions(`Uploaded file: ${file.name}`, hospitals, file.name));
-    setReviewOpen(true);
+    const hospital = inferAttachmentHospital(file.name);
+    if (!hospital) return;
+    const kind = file.type.startsWith("image/") ? "image" : "file";
+    const interaction: EvidenceItem = {
+      id: `interaction-${Date.now()}`,
+      label: file.name,
+      text: `Attached through Dawn AI and linked to ${hospital.name}.`,
+      at: today.toISOString().slice(0, 10),
+      kind,
+    };
+    attachInteraction(hospital.id, interaction);
+    setUploadedFiles((current) => [
+      {
+        id: `file-${Date.now()}`,
+        name: file.name,
+        type: file.type || "Unknown file type",
+        size: file.size,
+        uploadedAt: timestampNow(),
+        source: "Dawn AI",
+        hospitalId: hospital.id,
+        hospitalName: hospital.name,
+      },
+      ...current,
+    ]);
+    recordChatMessage(`Attached ${file.name} to ${hospital.name}.`);
+    setDawnExpanded(true);
+    setSuggestions(createSuggestions(`Uploaded file: ${file.name} for ${hospital.name}`, hospitals, file.name));
     event.target.value = "";
   }
 
@@ -369,7 +580,9 @@ export default function DawnApp() {
     };
     const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
     if (!Recognition) {
-      setComposer("Voice capture is not available in this browser. Type or drop a note instead.");
+      const message = "Voice capture is not available in this browser. Type or drop a note instead.";
+      setComposer(message);
+      recordChatMessage(message);
       return;
     }
 
@@ -383,8 +596,18 @@ export default function DawnApp() {
     recognition.onresult = (event) => {
       const transcript = event.results[0]?.[0]?.transcript ?? "";
       setComposer(transcript);
-      setSuggestions(createSuggestions(transcript, hospitals, "Voice note"));
-      setReviewOpen(true);
+      recordChatMessage(transcript);
+      setDawnExpanded(true);
+      const hospital = inferAttachmentHospital(transcript);
+      if (hospital) {
+        attachInteraction(hospital.id, {
+          id: `voice-${Date.now()}`,
+          label: "Voice note from Jeremy",
+          text: transcript,
+          at: today.toISOString().slice(0, 10),
+          kind: "voice",
+        });
+      }
     };
     recognition.start();
   }
@@ -405,11 +628,13 @@ export default function DawnApp() {
     setLastSnapshot(hospitals);
     setHospitals((current) => applySuggestion(current, suggestion));
     dismissSuggestion(suggestion.id);
+    recordChatMessage(`Approved: ${suggestion.hospitalName} — ${suggestion.field} updated.`);
   }
 
   function approveAll() {
     setLastSnapshot(hospitals);
     setHospitals((current) => suggestions.reduce(applySuggestion, current));
+    recordChatMessage(`Approved ${suggestions.length} suggested update${suggestions.length === 1 ? "" : "s"}.`);
     setSuggestions([]);
     setReviewOpen(false);
   }
@@ -472,7 +697,7 @@ export default function DawnApp() {
 
       <header className="topbar">
         <button className="brand" aria-label="Dawn AI home" onClick={() => handleStage("All")}>
-          <span className="brand-mark" aria-hidden="true" />
+          <DawnLogo />
           <span>Dawn AI</span>
         </button>
         <div className="top-actions">
@@ -493,43 +718,33 @@ export default function DawnApp() {
           <button className="icon-button" aria-label="Export to Excel" onClick={() => exportCsv(hospitals)}>
             <DownloadIcon />
           </button>
-          <button className="icon-button" aria-label="Invite user">
-            <UserPlusIcon />
-          </button>
           <button className="icon-button" aria-label="Logout">
             <LogoutIcon />
           </button>
         </div>
       </header>
 
-      <section className="command-panel" aria-label="Ask Dawn">
-        <button className={`mic-button ${isListening ? "is-listening" : ""}`} aria-label="Talk to Dawn" onClick={toggleMic}>
-          <MicIcon />
-        </button>
-        <input
-          value={composer}
-          onChange={(event) => setComposer(event.target.value)}
-          onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-            if (event.key === "Enter") handleComposerSend();
-          }}
-          placeholder="How can Dawn help you today?"
-        />
-        <input ref={fileInputRef} type="file" className="sr-only" onChange={handleFile} />
-        <button className="composer-icon" aria-label="Attach file" onClick={() => fileInputRef.current?.click()}>
-          <PaperclipIcon />
-        </button>
-        <button className="send-button" aria-label="Send to Dawn" onClick={handleComposerSend}>
-          <ArrowUpIcon />
-        </button>
-      </section>
-
       <section className="workbench">
         <section className="main-panel" aria-label="Onboard dashboard">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Welcome back</p>
               <h1>What needs moving today?</h1>
             </div>
+          </div>
+
+          <div className="filter-row">
+            <nav className="stage-tabs" aria-label="Activation stages">
+              <button className={activeStage === "All" ? "active" : ""} onClick={() => handleStage("All")}>
+                <span className="filter-label">All</span>
+                <span className="filter-count">{hospitals.length}</span>
+              </button>
+              {stages.map((stage) => (
+                <button key={stage} className={activeStage === stage ? "active" : ""} onClick={() => handleStage(stage)}>
+                  <span className="filter-label">{stage}</span>
+                  <span className="filter-count">{hospitals.filter((hospital) => hospital.stage === stage).length}</span>
+                </button>
+              ))}
+            </nav>
             <div className="search-shell">
               <input
                 className="search"
@@ -538,7 +753,7 @@ export default function DawnApp() {
                   setQuery(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Search hospital, stage, awaiting..."
+                placeholder="Search for anything"
               />
               <button className="add-hospital" aria-label="New hospital" onClick={() => setDrawer("new")}>
                 <PlusIcon />
@@ -546,28 +761,17 @@ export default function DawnApp() {
             </div>
           </div>
 
-          <nav className="stage-tabs" aria-label="Activation stages">
-            <button className={activeStage === "All" ? "active" : ""} onClick={() => handleStage("All")}>
-              All <b>{hospitals.length}</b>
-            </button>
-            {stages.map((stage) => (
-              <button key={stage} className={activeStage === stage ? "active" : ""} onClick={() => handleStage(stage)}>
-                {stage} <b>{hospitals.filter((hospital) => hospital.stage === stage).length}</b>
-              </button>
-            ))}
-          </nav>
-
           <div className="hospital-table" role="table">
             <div className="table-row table-head" role="row">
               <div role="columnheader" className="status-heading">
-                {settings.fieldLabels.status}
+                {settings.fieldLabels.priority}
                 <span className="info-dot" tabIndex={0}>
                   ^
                   <span className="tooltip">
-                    <b>Status sort</b>
-                    <span>1. Waiting on us rises first.</span>
-                    <span>2. Stage timing adjusts urgency.</span>
-                    <span>3. Older last interaction cools faster.</span>
+                    <b>Dawn&apos;s priority suggestion</b>
+                    <span>Waiting on Jeremy is weighted first.</span>
+                    <span>Older interactions and stage timing raise urgency.</span>
+                    <span>Use the arrows to apply your own judgement.</span>
                   </span>
                 </span>
               </div>
@@ -578,10 +782,10 @@ export default function DawnApp() {
                   ^
                   <span className="tooltip stage-tip">
                     <b>Stage flow</b>
-                    <span>Interest: agreements sent, EAA signed, LOI signed.</span>
-                    <span>Kickoff: invited, scheduled, completed.</span>
-                    <span>Pilot: initiated, completed.</span>
-                    <span>Active: 1, 2, and 3 month check-ins.</span>
+                    <StageFlow label="Interest" steps={["Agreements sent", "LOI signed", "EAA signed"]} />
+                    <StageFlow label="Kickoff" steps={["Invited", "Scheduled", "Completed"]} />
+                    <StageFlow label="Pilot" steps={["Initiated", "Completed"]} />
+                    <StageFlow label="Active" steps={["1 month", "2 month", "3 month"]} />
                   </span>
                 </span>
               </div>
@@ -589,30 +793,158 @@ export default function DawnApp() {
               <div role="columnheader">{settings.fieldLabels.lastInteraction}</div>
               <div role="columnheader">{settings.fieldLabels.awaiting}</div>
             </div>
-            {visibleHospitals.map((hospital) => (
-              <button className="table-row data-row" role="row" key={hospital.id} onClick={() => openHospital(hospital)}>
+            {visibleHospitals.map((hospital) => {
+              const priority = priorityFor(hospital);
+              const awaitingContact = hospital.awaiting === "hospital" ? contactAwaiting(hospital) : null;
+              return (
+              <div
+                className={`table-row data-row ${dragOverHospitalId === hospital.id ? "is-drag-target" : ""}`}
+                role="row"
+                key={hospital.id}
+                onClick={() => openHospital(hospital)}
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  setDraggedHospitalId(hospital.id);
+                }}
+                onDragEnd={() => {
+                  setDraggedHospitalId(null);
+                  setDragOverHospitalId(null);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDragOverHospitalId(hospital.id);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  placeBelow(hospital.id);
+                }}
+                ref={(element) => {
+                  if (element) rowRefs.current.set(hospital.id, element);
+                  else rowRefs.current.delete(hospital.id);
+                }}
+              >
+                <div role="cell" className="priority-cell">
+                  <span
+                    className={`priority-pill ${priority.toLowerCase()}`}
+                    style={{ "--priority-hue": priorityHue(hospital) } as React.CSSProperties}
+                  >
+                    {priority}
+                  </span>
+                  <div className="priority-controls" aria-label={`Adjust priority for ${hospital.name}`}>
+                    <button
+                      className="priority-up"
+                      type="button"
+                      aria-label={`Move ${hospital.name} priority up`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        adjustPriority(hospital, 1);
+                      }}
+                    >
+                      ^
+                    </button>
+                    <button
+                      className="priority-down"
+                      type="button"
+                      aria-label={`Move ${hospital.name} priority down`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        adjustPriority(hospital, -1);
+                      }}
+                    >
+                      ^
+                    </button>
+                  </div>
+                </div>
                 <div role="cell">
-                  <SunSignal signal={signalFor(hospital)} />
+                  <button className="hospital-name" type="button">
+                    {hospital.name}
+                  </button>
                 </div>
-                <div role="cell" className="hospital-name">
-                  {hospital.name}
+                <div role="cell" className="quick-edit-cell">
+                  <div className="quick-edit-value">
+                    <span className="stage-pill">{hospital.stage}</span>
+                    <span className="substage">{hospital.substage}</span>
+                  </div>
+                  <select
+                    className="quick-edit-select"
+                    aria-label={`Change stage for ${hospital.name}`}
+                    value={hospital.stage}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => {
+                      const stage = event.target.value as Stage;
+                      quickUpdateHospital(
+                        hospital.id,
+                        { stage, substage: stageSubstages[stage][0] },
+                        `Changed stage to ${stage}`,
+                      );
+                    }}
+                  >
+                    {stages.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div role="cell">
-                  <span className="stage-pill">{hospital.stage}</span>
-                  <span className="substage">{hospital.substage}</span>
-                </div>
-                <div role="cell" className="next-step">
-                  {hospital.nextStep}
+                <div role="cell" className="next-step quick-edit-cell">
+                  <span className="quick-edit-value">{hospital.nextStep}</span>
+                  <select
+                    className="quick-edit-select"
+                    aria-label={`Change next step for ${hospital.name}`}
+                    value={hospital.nextStep}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => {
+                      quickUpdateHospital(hospital.id, { nextStep: event.target.value }, `Changed next step to ${event.target.value}`);
+                    }}
+                  >
+                    {nextStepOptions
+                      .filter((option) => option !== "Other, please specify")
+                      .map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                  </select>
                 </div>
                 <div role="cell">
                   <span>{formatDate(hospital.lastInteractionAt)}</span>
                   <small>{hospital.lastInteraction}</small>
                 </div>
-                <div role="cell">
-                  <span className={`awaiting ${hospital.awaiting}`}>{hospital.awaiting === "us" ? "Us" : "Hospital"}</span>
+                <div role="cell" className="quick-edit-cell">
+                  <div className="quick-edit-value">
+                    <span className={`awaiting ${hospital.awaiting}`}>{hospital.awaiting === "us" ? "Jeremy" : awaitingContact?.name}</span>
+                    {awaitingContact ? <small className="awaiting-title">{awaitingContact.title}</small> : null}
+                  </div>
+                  <select
+                    className="quick-edit-select"
+                    aria-label={`Change who ${hospital.name} is awaiting`}
+                    value={hospital.awaiting === "us" ? "jeremy" : hospital.awaitingContactId}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => {
+                      const isJeremy = event.target.value === "jeremy";
+                      const contact = hospital.contacts.find((item) => item.id === event.target.value);
+                      quickUpdateHospital(
+                        hospital.id,
+                        isJeremy
+                          ? { awaiting: "us" }
+                          : { awaiting: "hospital", awaitingContactId: event.target.value },
+                        `Changed awaiting who to ${isJeremy ? "Jeremy" : contact?.name ?? "hospital contact"}`,
+                      );
+                    }}
+                  >
+                    <option value="jeremy">Jeremy</option>
+                    {hospital.contacts.map((contact) => (
+                      <option key={contact.id} value={contact.id}>
+                        {contact.name} — {contact.title}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </button>
-            ))}
+              </div>
+              );
+            })}
           </div>
 
           <footer className="pagination">
@@ -630,14 +962,105 @@ export default function DawnApp() {
           </footer>
         </section>
 
-        <aside className="note-panel" aria-label="Quick note">
+        <aside className="right-rail" aria-label="Notes and Dawn">
+          <section className="note-panel" aria-label="Quick note">
           <div className="note-toolbar">
-            <button aria-label="Bold note text">B</button>
-            <button aria-label="Italic note text">I</button>
-            <button aria-label="Checklist">☑</button>
-            <button aria-label="Bullets">•</button>
+            <button type="button" aria-label="Bold note text" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("bold")}>B</button>
+            <button type="button" aria-label="Italic note text" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("italic")}>I</button>
+            <button type="button" aria-label="Checklist" onMouseDown={(event) => event.preventDefault()} onClick={insertChecklistItem}>☑</button>
+            <button type="button" aria-label="Bullets" onMouseDown={(event) => event.preventDefault()} onClick={() => formatNote("insertUnorderedList")}>•</button>
           </div>
-          <textarea value={note} onChange={(event) => setNote(event.target.value)} />
+            <div
+              ref={noteEditorRef}
+              className="note-editor"
+              contentEditable
+              suppressContentEditableWarning
+              role="textbox"
+              aria-label="Quick note editor"
+              onInput={updateNoteFromEditor}
+              dangerouslySetInnerHTML={{ __html: note }}
+            />
+          </section>
+
+          <section className={`dawn-sidecar ${isDawnExpanded ? "is-expanded" : ""}`} aria-label="Ask Dawn">
+            {isDawnExpanded ? (
+              <>
+                <header>
+                  <div className="chat-title">
+                    <DawnLogo />
+                    <div>
+                      <h2>Ask Dawn</h2>
+                      <span>Voice notes, files, and updates stay here.</span>
+                    </div>
+                  </div>
+                </header>
+                <div className="chat-thread" aria-live="polite">
+                  {chatMessages.length ? (
+                    chatMessages.map((message) => <p className="chat-message" key={message.id}>{message.content}</p>)
+                  ) : (
+                    <p className="chat-empty">Use the microphone for a voice note, or type a quick update.</p>
+                  )}
+                </div>
+                {suggestions.length ? (
+                  <section className="chat-suggestions" aria-label="Dawn suggested changes">
+                    <header>
+                      <div>
+                        <b>Dawn suggests {suggestions.length} change{suggestions.length === 1 ? "" : "s"}</b>
+                        <small>Review each one before it updates Onboard.</small>
+                      </div>
+                      <button className="chat-approve-all" onClick={approveAll}>Approve all</button>
+                    </header>
+                    {suggestions.map((suggestion) => (
+                      <article key={suggestion.id}>
+                        <div className="chat-suggestion-title">
+                          <b>{suggestion.hospitalName}</b>
+                          <span>{suggestion.field}</span>
+                        </div>
+                        <input
+                          aria-label={`Suggested ${suggestion.field} for ${suggestion.hospitalName}`}
+                          value={suggestion.suggestedValue}
+                          onChange={(event) => updateSuggestion(suggestion.id, event.target.value)}
+                        />
+                        <small>{suggestion.confidence}% confidence · from this update</small>
+                        {suggestion.conflict ? <p className="conflict">{suggestion.conflict}</p> : null}
+                        <div>
+                          <button className="chat-approve" onClick={() => approveSuggestion(suggestion)}>Approve</button>
+                          <button className="chat-dismiss" onClick={() => dismissSuggestion(suggestion.id)}>Dismiss</button>
+                        </div>
+                      </article>
+                    ))}
+                  </section>
+                ) : null}
+                <section className="chat-composer" aria-label="Message Dawn">
+                  <button className={`mic-button ${isListening ? "is-listening" : ""}`} aria-label="Talk to Dawn" onClick={toggleMic}>
+                    <MicIcon />
+                  </button>
+                  <input
+                    value={composer}
+                    onChange={(event) => setComposer(event.target.value)}
+                    onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+                      if (event.key === "Enter") handleComposerSend();
+                    }}
+                    placeholder="Speak or type an update"
+                  />
+                  <input ref={fileInputRef} type="file" className="sr-only" onChange={handleFile} />
+                  <button className="composer-icon" aria-label="Attach file" onClick={() => fileInputRef.current?.click()}>
+                    <PaperclipIcon />
+                  </button>
+                  <button className="send-button" aria-label="Send to Dawn" onClick={handleComposerSend}>
+                    <ArrowUpIcon />
+                  </button>
+                </section>
+              </>
+            ) : (
+              <button className="dawn-prompt" type="button" onClick={() => setDawnExpanded(true)} aria-expanded={false}>
+                <span className="dawn-prompt-mic" aria-hidden="true"><MicIcon /></span>
+                <span>
+                  <b>How can Dawn help?</b>
+                </span>
+              </button>
+            )}
+          </section>
         </aside>
       </section>
 
@@ -653,11 +1076,23 @@ export default function DawnApp() {
       ) : null}
 
       {drawer ? (
-        <DrawerShell title={drawerTitle(drawer, selectedHospital)} onClose={() => setDrawer(null)}>
-          {drawer === "hospital" && selectedHospital ? <EditableHospitalDetail hospital={selectedHospital} onSave={saveHospital} /> : null}
+        <DrawerShell
+          title={drawerTitle(drawer, selectedHospital)}
+          onClose={() => setDrawer(null)}
+          onTitleChange={drawer === "hospital" && selectedHospital ? (name) => renameHospital(selectedHospital.id, name) : undefined}
+        >
+          {drawer === "hospital" && selectedHospital ? (
+            <EditableHospitalDetail
+              hospital={selectedHospital}
+              onSave={(nextHospital) => {
+                saveHospital(nextHospital);
+                setDrawer(null);
+              }}
+            />
+          ) : null}
           {drawer === "settings" ? <EditableSettingsDrawer settings={settings} onSave={setSettings} /> : null}
           {drawer === "audit" ? <EditableAuditDrawer hospitals={hospitals} /> : null}
-          {drawer === "files" ? <EditableFileStorageDrawer hospitals={hospitals} /> : null}
+          {drawer === "files" ? <EditableFileStorageDrawer files={uploadedFiles} /> : null}
           {drawer === "new" ? <EditableNewHospitalDrawer onCreate={createNewHospital} /> : null}
         </DrawerShell>
       ) : null}
@@ -667,20 +1102,35 @@ export default function DawnApp() {
 
 function createSuggestions(text: string, hospitals: Hospital[], source = "Messy note"): Suggestion[] {
   const lower = text.toLowerCase();
-  const urgent = hospitals.find((hospital) => hospital.name.includes("Northbridge")) ?? hospitals[0];
-  const legal = hospitals.find((hospital) => hospital.name.includes("Harborview")) ?? hospitals[2];
-  const pilot = hospitals.find((hospital) => hospital.name.includes("Redwood")) ?? hospitals[12];
-  const active = hospitals.find((hospital) => hospital.name.includes("Riverbend")) ?? hospitals[15];
-  const maybeMentioned = hospitals.find((hospital) => lower.includes(hospital.name.toLowerCase().split(" ")[0]));
+  const mentioned = hospitals.find((hospital) => {
+    const name = hospital.name.toLowerCase();
+    const distinctiveWord = name.split(/[^a-z]+/).find((word) => word.length >= 6);
+    return lower.includes(name) || Boolean(distinctiveWord && lower.includes(distinctiveWord));
+  });
+  const target = mentioned ?? [...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a))[0];
+  if (!target) return [];
 
-  const picked = maybeMentioned ?? urgent;
-  return [
-    buildSuggestion(picked, "nextStep", picked.nextStep, "Send two kickoff slots and ask coordinator to confirm", 92, source),
-    buildSuggestion(picked, "awaiting", picked.awaiting, "us", 88, source),
-    buildSuggestion(legal, "nextStep", legal.nextStep, "Send EAA packet with admin instructions", 84, source),
-    buildSuggestion(pilot, "lastInteraction", pilot.lastInteraction, "PI asked whether first feasibility form was submitted", 81, source),
-    buildSuggestion(active, "stage", active.stage, "Active", 76, source, active.stage === "Pilot" ? "This moves the site from Pilot to Active. Confirm pilot completion first." : undefined),
-  ];
+  const updates: Suggestion[] = [];
+  const conciseUpdate = text.replace(/\s+/g, " ").trim().slice(0, 180);
+  updates.push(buildSuggestion(target, "lastInteraction", target.lastInteraction, conciseUpdate, mentioned ? 94 : 62, source, mentioned ? undefined : "No organisation was named, so Dawn selected the highest-priority site. Confirm before approving."));
+
+  if (/\b(eaa|loi|agreement|data agreement)\b.*\b(signed|complete|approved)\b/.test(lower)) {
+    updates.push(buildSuggestion(target, "nextStep", target.nextStep, "Schedule kickoff", mentioned ? 90 : 58, source));
+  } else if (/\bkickoff\b.*\b(scheduled|booked|confirmed)\b/.test(lower)) {
+    updates.push(buildSuggestion(target, "stage", target.stage, "Kickoff", mentioned ? 89 : 58, source));
+  } else if (/\bpilot\b.*\b(completed|complete)\b/.test(lower)) {
+    updates.push(buildSuggestion(target, "stage", target.stage, "Active", mentioned ? 86 : 56, source, "Confirm the site has completed its pilot exit criteria before approving."));
+  } else if (/\bpilot\b/.test(lower)) {
+    updates.push(buildSuggestion(target, "stage", target.stage, "Pilot", mentioned ? 84 : 55, source));
+  }
+
+  if (/\b(waiting on us|waiting on jeremy|we need to|our team)\b/.test(lower)) {
+    updates.push(buildSuggestion(target, "awaiting", target.awaiting, "us", mentioned ? 88 : 58, source));
+  } else if (/\b(waiting on|awaiting|pending with)\b/.test(lower)) {
+    updates.push(buildSuggestion(target, "awaiting", target.awaiting, "hospital", mentioned ? 84 : 56, source));
+  }
+
+  return updates.slice(0, 3);
 }
 
 function buildSuggestion(
@@ -801,12 +1251,31 @@ function ReviewModal({
   );
 }
 
-function DrawerShell({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+function DrawerShell({
+  title,
+  children,
+  onClose,
+  onTitleChange,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  onTitleChange?: (value: string) => void;
+}) {
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <aside className="drawer" onClick={(event) => event.stopPropagation()}>
         <header>
-          <h2>{title}</h2>
+          {onTitleChange ? (
+            <input
+              className="drawer-title-input"
+              aria-label="Hospital name"
+              value={title}
+              onChange={(event) => onTitleChange(event.target.value)}
+            />
+          ) : (
+            <h2>{title}</h2>
+          )}
           <button className="icon-button" aria-label="Close drawer" onClick={onClose}>
             ×
           </button>
@@ -927,24 +1396,68 @@ function NewHospitalDrawer({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-function SunSignal({ signal }: { signal: Signal }) {
-  return <span className={`sun-signal ${signal}`} aria-label={`${signal} activation status`} />;
-}
-
-function urgencyScore(hospital: Hospital) {
+function suggestedPriorityScore(hospital: Hospital) {
   const days = daysSince(hospital.lastInteractionAt);
   const threshold = stageThresholds[hospital.stage];
-  const overdueRatio = days / threshold;
-  const waitingBoost = hospital.awaiting === "us" ? 200 : 0;
-  return waitingBoost + overdueRatio * 100 + days;
+  const timingScore = Math.min(45, (days / threshold) * 32 + Math.min(days, 14));
+  const awaitingScore = hospital.awaiting === "us" ? 40 : 0;
+  return 10 + timingScore + awaitingScore;
 }
 
-function signalFor(hospital: Hospital): Signal {
-  const ratio = daysSince(hospital.lastInteractionAt) / stageThresholds[hospital.stage];
-  if (hospital.awaiting === "us" && ratio >= 1.4) return "critical";
-  if (ratio >= 1.1) return "cold";
-  if (ratio >= 0.55) return "warm";
-  return "bright";
+function addDemoInteractions(hospital: Hospital) {
+  const examples: Record<string, EvidenceItem[]> = {
+    h01: [
+      {
+        id: "h01-voice-demo",
+        label: "Voice note from Jeremy",
+        text: "Please offer two kickoff slots next week and confirm the EAA is on file.",
+        at: "2026-07-17",
+        kind: "voice",
+      },
+    ],
+    h03: [
+      {
+        id: "h03-pdf-demo",
+        label: "LOI-signed.pdf",
+        text: "PDF attached through Dawn AI and linked to Harborview Clinical Institute.",
+        at: "2026-07-16",
+        kind: "file",
+      },
+    ],
+    h04: [
+      {
+        id: "h04-image-demo",
+        label: "pilot-workspace.png",
+        text: "Image attached through Dawn AI and linked to Silverline General Hospital.",
+        at: "2026-07-15",
+        kind: "image",
+      },
+    ],
+  };
+
+  const interactions = examples[hospital.id] ?? [];
+  return interactions.length ? { ...hospital, evidence: [...interactions, ...hospital.evidence] } : hospital;
+}
+
+function priorityScore(hospital: Hospital) {
+  return suggestedPriorityScore(hospital) + hospital.priorityAdjustment;
+}
+
+function priorityFor(hospital: Hospital): Priority {
+  const score = priorityScore(hospital);
+  if (score >= 78) return "Urgent";
+  if (score >= 57) return "High";
+  if (score >= 34) return "Med";
+  return "Low";
+}
+
+function priorityHue(hospital: Hospital) {
+  const intensity = Math.max(0, Math.min(1, (priorityScore(hospital) - 10) / 80));
+  return String(Math.round(150 - intensity * 150));
+}
+
+function contactAwaiting(hospital: Hospital) {
+  return hospital.contacts.find((contact) => contact.id === hospital.awaitingContactId) ?? hospital.contacts[0];
 }
 
 function daysSince(date: string) {
@@ -1086,6 +1599,49 @@ function ArrowUpIcon() {
   return (
     <Icon>
       <path d="M12 19V5m0 0-6 6m6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Icon>
+  );
+}
+
+function DawnLogo() {
+  return (
+    <svg className="dawn-logo" viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" rx="7" fill="#e64a2f" />
+      <circle cx="12" cy="10.2" r="3.4" fill="#ffd55a" />
+      <path d="M4 14.4h16" stroke="#9f2131" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M9 16.2h6l-.8 5h-4.4z" fill="#ff762d" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <Icon>
+      <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </Icon>
+  );
+}
+
+function StageFlow({ label, steps }: { label: string; steps: string[] }) {
+  return (
+    <span className="stage-flow">
+      <b>{label}</b>
+      <span className="stage-flow-steps">
+        {steps.map((step, index) => (
+          <span className="stage-flow-step" key={step}>
+            {index > 0 ? <FlowArrowIcon /> : null}
+            {step}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function FlowArrowIcon() {
+  return (
+    <Icon>
+      <path d="M4 12h15m-5-5 5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </Icon>
   );
 }
