@@ -418,29 +418,6 @@ export default function DawnApp() {
     );
   }
 
-  function quickUpdateHospital(id: string, changes: Partial<Hospital>, action: string) {
-    setHospitals((current) =>
-      current.map((hospital) =>
-        hospital.id === id
-          ? {
-              ...hospital,
-              ...changes,
-              audit: [
-                {
-                  id: `audit-${Date.now()}`,
-                  at: timestampNow(),
-                  by: "Demo user",
-                  action,
-                  source: "Hover quick edit",
-                },
-                ...hospital.audit,
-              ],
-            }
-          : hospital,
-      ),
-    );
-  }
-
   function placeBelow(hospitalId: string) {
     if (!draggedHospitalId || draggedHospitalId === hospitalId) return;
 
@@ -728,7 +705,7 @@ export default function DawnApp() {
         <section className="main-panel" aria-label="Onboard dashboard">
           <div className="panel-header">
             <div>
-              <h1>What needs moving today?</h1>
+              <h1>Hospital onboarding</h1>
             </div>
           </div>
 
@@ -862,85 +839,20 @@ export default function DawnApp() {
                     {hospital.name}
                   </button>
                 </div>
-                <div role="cell" className="quick-edit-cell">
-                  <div className="quick-edit-value">
-                    <span className="stage-pill">{hospital.stage}</span>
-                    <span className="substage">{hospital.substage}</span>
-                  </div>
-                  <select
-                    className="quick-edit-select"
-                    aria-label={`Change stage for ${hospital.name}`}
-                    value={hospital.stage}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => {
-                      const stage = event.target.value as Stage;
-                      quickUpdateHospital(
-                        hospital.id,
-                        { stage, substage: stageSubstages[stage][0] },
-                        `Changed stage to ${stage}`,
-                      );
-                    }}
-                  >
-                    {stages.map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage}
-                      </option>
-                    ))}
-                  </select>
+                <div role="cell">
+                  <span className="stage-pill">{hospital.stage}</span>
+                  <span className="substage">{hospital.substage}</span>
                 </div>
-                <div role="cell" className="next-step quick-edit-cell">
-                  <span className="quick-edit-value">{hospital.nextStep}</span>
-                  <select
-                    className="quick-edit-select"
-                    aria-label={`Change next step for ${hospital.name}`}
-                    value={hospital.nextStep}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => {
-                      quickUpdateHospital(hospital.id, { nextStep: event.target.value }, `Changed next step to ${event.target.value}`);
-                    }}
-                  >
-                    {nextStepOptions
-                      .filter((option) => option !== "Other, please specify")
-                      .map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                  </select>
+                <div role="cell" className="next-step">
+                  {hospital.nextStep}
                 </div>
                 <div role="cell">
                   <span>{formatDate(hospital.lastInteractionAt)}</span>
                   <small>{hospital.lastInteraction}</small>
                 </div>
-                <div role="cell" className="quick-edit-cell">
-                  <div className="quick-edit-value">
-                    <span className={`awaiting ${hospital.awaiting}`}>{hospital.awaiting === "us" ? "Jeremy" : awaitingContact?.name}</span>
-                    {awaitingContact ? <small className="awaiting-title">{awaitingContact.title}</small> : null}
-                  </div>
-                  <select
-                    className="quick-edit-select"
-                    aria-label={`Change who ${hospital.name} is awaiting`}
-                    value={hospital.awaiting === "us" ? "jeremy" : hospital.awaitingContactId}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => {
-                      const isJeremy = event.target.value === "jeremy";
-                      const contact = hospital.contacts.find((item) => item.id === event.target.value);
-                      quickUpdateHospital(
-                        hospital.id,
-                        isJeremy
-                          ? { awaiting: "us" }
-                          : { awaiting: "hospital", awaitingContactId: event.target.value },
-                        `Changed awaiting who to ${isJeremy ? "Jeremy" : contact?.name ?? "hospital contact"}`,
-                      );
-                    }}
-                  >
-                    <option value="jeremy">Jeremy</option>
-                    {hospital.contacts.map((contact) => (
-                      <option key={contact.id} value={contact.id}>
-                        {contact.name} — {contact.title}
-                      </option>
-                    ))}
-                  </select>
+                <div role="cell">
+                  <span className={`awaiting ${hospital.awaiting}`}>{hospital.awaiting === "us" ? "Jeremy" : awaitingContact?.name}</span>
+                  {awaitingContact ? <small className="awaiting-title">{awaitingContact.title}</small> : null}
                 </div>
               </div>
               );
