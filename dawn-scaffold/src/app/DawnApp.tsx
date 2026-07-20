@@ -10,6 +10,7 @@ import {
   NewHospitalDrawer as EditableNewHospitalDrawer,
   SettingsDrawer as EditableSettingsDrawer,
 } from "./Drawers";
+import { extractTextFromFile } from "./fileExtraction";
 
 export type Stage = "Interest" | "Kickoff" | "Pilot" | "Active";
 export type Awaiting = "us" | "hospital";
@@ -328,7 +329,7 @@ export default function DawnApp() {
   const [page, setPage] = useState(1);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [note, setNote] = useState("<strong>High</strong><br>☐ Book kickoff for Northbridge<br>☐ Send EAA packet to Harborview<br>☐ Check pilot form at Redwood");
+  const [note, setNote] = useState('<strong>High</strong><br><label><input type="checkbox" /> Book kickoff for Northbridge</label><br><label><input type="checkbox" /> Send EAA packet to Harborview</label><br><label><input type="checkbox" /> Check pilot form at Redwood</label>');
   const [composer, setComposer] = useState("");
   const [isNoteOpen, setNoteOpen] = useState(true);
   const [isNoteMenuOpen, setNoteMenuOpen] = useState(false);
@@ -402,12 +403,6 @@ export default function DawnApp() {
       });
     }, 15000);
     return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (!note.includes('type="checkbox"')) {
-      setNote('<strong>High</strong><br><label><input type="checkbox" /> Book kickoff for Northbridge</label><br><label><input type="checkbox" /> Send EAA packet to Harborview</label><br><label><input type="checkbox" /> Check pilot form at Redwood</label>');
-    }
   }, []);
 
   useEffect(() => {
@@ -712,6 +707,8 @@ export default function DawnApp() {
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    setDawnExpanded(true);
+    recordChatMessage(`Reading ${file.name}…`, "assistant");
     const extraction = await extractTextFromFile(file);
     const sourceText = extraction.text.trim();
     const hospital = inferAttachmentHospital(`${file.name}\n${sourceText}`);
@@ -738,14 +735,14 @@ export default function DawnApp() {
         source: "Dawn AI",
         hospitalId: hospital.id,
         hospitalName: hospital.name,
+        content: sourceText || undefined,
         data,
       },
       ...current,
     ]);
     recordChatMessage(sourceText
-      ? `Extracted ${sourceText.length} characters from ${file.name}, linked it to ${hospital.name}, and prepared any safe changes for review.`
+      ? `Extracted ${sourceText.length} characters from ${file.name}, linked it to ${hospital.name}, and prepared any safe changes for review. ${extraction.note}`
       : `Attached ${file.name} as an interaction for ${hospital.name}. ${extraction.note}`, "assistant");
-    setDawnExpanded(true);
     setSuggestions(createSuggestions(`Uploaded file: ${file.name}\n${sourceText || `for ${hospital.name}`}`, hospitals, file.name)
       .map((suggestion) => ({ ...suggestion, sourceText: sourceText || undefined })));
     event.target.value = "";
@@ -790,7 +787,7 @@ export default function DawnApp() {
     const recognition = new Recognition();
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = "en-US";
+    recognition.lang = "en-SG";
     recognition.onstart = () => setListening(true);
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
@@ -1267,8 +1264,14 @@ export default function DawnApp() {
                     }}
                     placeholder="Speak or type an update"
                   />
-                  <input ref={fileInputRef} type="file" className="sr-only" onChange={handleFile} />
-                  <button className="composer-icon" aria-label="Attach file" onClick={() => fileInputRef.current?.click()}>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="sr-only"
+                    accept=".txt,.md,.csv,.json,.xlsx,.xls,.docx,.pptx,.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,image/*,text/plain,application/pdf"
+                    onChange={handleFile}
+                  />
+                  <button className="composer-icon" aria-label="Attach file" title="Attach PDF, Word, Excel, PPT, image, or text" onClick={() => fileInputRef.current?.click()}>
                     <PaperclipIcon />
                   </button>
                 </section>
@@ -1828,116 +1831,6 @@ function DrawerShell({
   );
 }
 
-function HospitalDetail({ hospital }: { hospital: Hospital }) {
-  return (
-    <div className="drawer-stack">
-      <section>
-        <h3>Hidden detail</h3>
-        <p>{hospital.notes}</p>
-      </section>
-      <section>
-        <h3>Contacts</h3>
-        {hospital.contacts.map((contact) => (
-          <div className="detail-row" key={contact.id}>
-            <b>{contact.title}</b>
-            <span>{contact.name}</span>
-            <small>{contact.email}</small>
-          </div>
-        ))}
-      </section>
-      <section>
-        <h3>Evidence</h3>
-        {hospital.evidence.map((item) => (
-          <div className="detail-row" key={item.id}>
-            <b>{item.label}</b>
-            <span>{item.text}</span>
-            <small>{formatDate(item.at)}</small>
-          </div>
-        ))}
-      </section>
-      <section>
-        <h3>Activity</h3>
-        {hospital.audit.map((entry) => (
-          <div className="detail-row" key={entry.id}>
-            <b>{entry.action}</b>
-            <span>{entry.source}</span>
-            <small>
-              {entry.by} · {entry.at}
-            </small>
-          </div>
-        ))}
-      </section>
-      <section>
-        <h3>Stage history</h3>
-        {hospital.stageHistory.map((item) => (
-          <p className="history-line" key={item}>
-            {item}
-          </p>
-        ))}
-      </section>
-    </div>
-  );
-}
-
-function SettingsDrawer() {
-  return (
-    <div className="drawer-stack">
-      <section>
-        <h3>Columns</h3>
-        {["Status", "Hospital", "Stage", "Next step", "Last interaction", "Awaiting"].map((label) => (
-          <label className="setting-row" key={label}>
-            <input type="checkbox" defaultChecked />
-            <span>{label}</span>
-          </label>
-        ))}
-      </section>
-      <section>
-        <h3>Stages</h3>
-        {stages.map((stage) => (
-          <label className="setting-row" key={stage}>
-            <input defaultValue={stage} />
-          </label>
-        ))}
-      </section>
-      <section>
-        <h3>Status timing</h3>
-        <p>Waiting on us is urgent first. Stage timing then controls how quickly a site cools.</p>
-      </section>
-    </div>
-  );
-}
-
-function AuditDrawer({ hospitals }: { hospitals: Hospital[] }) {
-  const audit = hospitals.flatMap((hospital) => hospital.audit.map((entry) => ({ ...entry, hospital: hospital.name }))).slice(0, 24);
-  return (
-    <div className="drawer-stack">
-      {audit.map((entry) => (
-        <section className="detail-row" key={entry.id}>
-          <b>{entry.hospital}</b>
-          <span>{entry.action}</span>
-          <small>
-            {entry.by} · {entry.at}
-          </small>
-        </section>
-      ))}
-    </div>
-  );
-}
-
-function NewHospitalDrawer({ onCreate }: { onCreate: () => void }) {
-  return (
-    <div className="drawer-stack">
-      <section>
-        <h3>Manual fallback</h3>
-        <p>Use this only when there is no messy note, email, file, or voice update to parse.</p>
-        <button className="primary-action" onClick={onCreate}>
-          Create hospital
-        </button>
-      </section>
-    </div>
-  );
-}
-
 function suggestedPriorityScore(hospital: Hospital) {
   const days = daysSince(hospital.lastInteractionAt);
   const threshold = stageThresholds[hospital.stage];
@@ -2039,75 +1932,11 @@ function daysSince(date: string) {
 }
 
 function formatDate(date: string) {
-  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short" }).format(new Date(`${date}T12:00:00+08:00`));
-}
-
-type ExtractedFileText = { text: string; note: string };
-
-async function extractTextFromFile(file: File): Promise<ExtractedFileText> {
-  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-
-  if (["txt", "md", "csv", "json"].includes(extension)) {
-    return { text: await file.text(), note: "Text extracted locally." };
-  }
-
-  if (["xlsx", "xls"].includes(extension)) {
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const text = workbook.SheetNames.map((name) => {
-      const sheet = workbook.Sheets[name];
-      return `Sheet: ${name}\n${XLSX.utils.sheet_to_csv(sheet)}`;
-    }).join("\n\n");
-    return { text, note: "Spreadsheet text extracted locally." };
-  }
-
-  if (["docx", "pptx"].includes(extension)) {
-    const archive = await JSZip.loadAsync(await file.arrayBuffer());
-    const paths = extension === "docx"
-      ? ["word/document.xml"]
-      : Object.keys(archive.files).filter((path) => /^ppt\/slides\/slide\d+\.xml$/.test(path)).sort();
-    const parts = await Promise.all(paths.map(async (path) => xmlToText(await archive.file(path)?.async("text") ?? "")));
-    return {
-      text: parts.filter(Boolean).join("\n\n"),
-      note: extension === "docx" ? "Word text extracted locally." : "PowerPoint slide text extracted locally.",
-    };
-  }
-
-  if (extension === "pdf") {
-    const text = extractEmbeddedPdfText(new Uint8Array(await file.arrayBuffer()));
-    return {
-      text,
-      note: text ? "Embedded PDF text extracted locally." : "This PDF appears scanned or encoded; OCR will be needed to read it.",
-    };
-  }
-
-  if (["jpg", "jpeg", "png", "webp"].includes(extension) || file.type.startsWith("image/")) {
-    return { text: "", note: "Image stored. OCR is required before Dawn can read text in this image." };
-  }
-
-  if (extension === "canva") {
-    return { text: "", note: "Export this Canva design as PDF, PPTX, or PNG, then upload that export for extraction." };
-  }
-
-  return { text: "", note: "This file was stored, but its text format is not yet supported." };
-}
-
-function xmlToText(xml: string) {
-  return xml
-    .replace(/<w:tab\/>|<a:br\/>|<w:br\/>/g, " ")
-    .replace(/<\/w:p>|<\/a:p>/g, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractEmbeddedPdfText(bytes: Uint8Array) {
-  const raw = new TextDecoder("latin1").decode(bytes);
-  const fragments = [...raw.matchAll(/\((?:\\.|[^\\)])*\)\s*Tj/g)]
-    .map((match) => match[0].replace(/^\(|\)\s*Tj$/g, "").replace(/\\([()\\])/g, "$1"));
-  return fragments.join(" ").replace(/\s+/g, " ").trim();
+  return new Intl.DateTimeFormat("en-SG", {
+    day: "numeric",
+    month: "short",
+    timeZone: "Asia/Singapore",
+  }).format(new Date(`${date}T12:00:00+08:00`));
 }
 
 function isStage(value: string): value is Stage {
@@ -2124,7 +1953,7 @@ function drawerTitle(drawer: Drawer, hospital: Hospital | null) {
 }
 
 function timestampNow() {
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("en-SG", {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Singapore",
@@ -2257,14 +2086,6 @@ function PaperclipIcon() {
   );
 }
 
-function ArrowUpIcon() {
-  return (
-    <Icon>
-      <path d="M12 19V5m0 0-6 6m6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </Icon>
-  );
-}
-
 function DawnLogo() {
   return (
     <svg className="dawn-logo" viewBox="0 0 24 24" aria-hidden="true">
@@ -2273,14 +2094,6 @@ function DawnLogo() {
       <path d="M4 14.4h16" stroke="#9f2131" strokeWidth="1.6" strokeLinecap="round" />
       <path d="M9 16.2h6l-.8 5h-4.4z" fill="#ff762d" />
     </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <Icon>
-      <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </Icon>
   );
 }
 
@@ -2329,14 +2142,6 @@ function DownloadIcon() {
   return (
     <Icon>
       <path d="M12 4v10m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-    </Icon>
-  );
-}
-
-function UserPlusIcon() {
-  return (
-    <Icon>
-      <path d="M15 19a6 6 0 0 0-12 0M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6m-3-3h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </Icon>
   );
 }

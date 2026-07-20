@@ -22,9 +22,11 @@ Also stored in `CODEX_SESSION_ID.md` and a Cursor personal rule titled “Dawn C
 2. Human-in-control: propose Pilot → Active but warn when confirmation is needed; dismiss or edit.  
 3. New hospital / contact from unstructured text.  
 4. Multi-hospital notes split into the right hospitals.  
-5. Export zip (spreadsheet + attachments) as the “reviewable and exportable” close.
+5. Drop a PDF / Excel / Word / image → Dawn reads text locally (OCR for images / scanned first page) → suggestions for approval.  
+6. Export zip (spreadsheet + attachments) as the “reviewable and exportable” close.
 
-Demo scripts live at: `../outputs/dawn-hackathon-demo-scripts.md`
+Demo scripts live at: `../outputs/dawn-hackathon-demo-scripts.md`  
+Bundled demo files: `dawn-scaffold/public/demo-files/`
 
 ---
 
@@ -38,19 +40,21 @@ Demo scripts live at: `../outputs/dawn-hackathon-demo-scripts.md`
 | App (Next.js) | `dawn-scaffold\` |
 | Local URL | http://127.0.0.1:3000 |
 | GitHub | `jeremylowzhiyancode/dawn` |
-| Branch | `agent/dawn-ui-polish` (last known push ~`4929b84`; local uncommitted polish may exist) |
+| Branch | `cursor/dawn-doc-extraction-7f72` (continues from `agent/dawn-ui-polish` / `eb160b2`) |
 
 ---
 
 ## Architecture (current demo)
 
 - **Client-side rule / regex “AI”** in `dawn-scaffold/src/app/DawnApp.tsx` — free local demo, **no paid LLM API**.  
+- File text extraction in `dawn-scaffold/src/app/fileExtraction.ts` (pdf.js + tesseract.js OCR, plus Excel/Word/PPT/text).  
 - Suggestions are approval-first: accept / edit / dismiss only.  
 - UI drawers and panels in `dawn-scaffold/src/app/Drawers.tsx`.  
 - Styling in `dawn-scaffold/src/app/globals.css`.  
 - Entry: `page.tsx` → `DawnApp`.  
-- Demo date anchor in code is around Singapore (+08:00).  
-- Data is in-browser / local demo state (not a production DB yet).
+- Timestamps use Singapore time (`Asia/Singapore`, `en-SG`).  
+- Data is in-browser / local demo state (not a production DB yet).  
+- Static export (`output: "export"`) — keep extraction in the browser.
 
 Key types/concepts: hospitals, contacts, stages (`Interest` → `Kickoff` → `Pilot` → `Active`), awaiting (us / hospital), priorities, audit entries, stored files, evidence.
 
@@ -58,7 +62,7 @@ Key types/concepts: hospitals, contacts, stages (`Interest` → `Kickoff` → `P
 
 ## Feature inventory
 
-### Working (from Codex session)
+### Working
 
 - Priority dashboard  
 - Ask Dawn focused ChatGPT-style chat  
@@ -69,50 +73,46 @@ Key types/concepts: hospitals, contacts, stages (`Interest` → `Kickoff` → `P
 - Drag-to-rank (priority)  
 - File storage / attachments for traceability  
 - Export zip (xlsx + attachments)  
+- Local document text extraction (PDF / Excel / Word / PPT / text / CSV)  
+- On-device OCR for images and scanned PDF first page  
+- Singapore timezone formatting  
 - Synthetic demo hospitals and voice/note demos  
 
 ### Incomplete / next
 
-- PDF / Excel / Word / PPT / image **text extraction** (+ OCR)  
-- Singapore timezone polish if still unfinished  
-- Demo readiness / polish for hackathon presentation  
+- Demo readiness / polish for hackathon presentation (run the 2-minute script end-to-end)  
+- Deeper OCR quality tuning if scanned demos are hard to read  
 - **Do not deploy** until database, auth, and real AI choices are decided  
 
 ---
 
-## Test assets (`../outputs/`)
+## Test assets
 
 | Asset | Purpose |
 |-------|---------|
-| `dawn-hackathon-demo-scripts.md` | Voice/paste demo scripts + 2-minute pitch sequence |
-| `dawn-ai-test-pack.md` | AI behavior test cases |
-| `northbridge-eaa-demo.txt` | Sample note for Northbridge |
-| `lakeside-pilot-tracker-demo.csv` | Sample tracker data |
-| `dawn-pdf-tests/01-new-hospital-and-contact.pdf` | PDF extraction test |
-| `dawn-pdf-tests/02-existing-contact-correction.pdf` | PDF extraction test |
-| `dawn-pdf-tests/03-stage-and-next-step-update.pdf` | PDF extraction test |
-| `dawn-pdf-tests/04-multi-hospital-mixed-signals.pdf` | PDF extraction test |
+| `dawn-scaffold/public/demo-files/*.pdf` | PDF extraction demos |
+| `dawn-scaffold/public/demo-files/northbridge-eaa-demo.txt` | Sample note for Northbridge |
+| `dawn-scaffold/public/demo-files/lakeside-pilot-tracker-demo.csv` | Sample tracker data |
+| `../outputs/dawn-hackathon-demo-scripts.md` | Voice/paste demo scripts + 2-minute pitch sequence (if present locally) |
 
 ---
 
 ## Known limitations (session)
 
 - “AI” is pattern matching for demos—not a real model. Edge cases and messy language can miss.  
-- File **upload/storage** works better than deep document **content extraction** (PDF etc. still TODO).  
+- OCR can be slow the first time and may misread messy handwriting.  
 - No production auth / shared database yet.  
 - Do not treat deploy as in scope until those decisions are made.  
-- Prefer the `2026-07-19\iw-an\dawn` tree; the older `Documents\Codex\dawn` copy can confuse work.
 
 ---
 
 ## Recommended next steps (hackathon)
 
-1. Finish or clearly scope document extraction (at least PDF demo path using `outputs/dawn-pdf-tests`).  
-2. Run the 2-minute demo sequence from `dawn-hackathon-demo-scripts.md` end-to-end on localhost.  
-3. Fix any Singapore timezone / “today” display quirks if they show in the demo.  
-4. Polish UI only where it helps the live demo; avoid big refactors.  
-5. Keep session ID ready for submission; push UI polish branch when ready.  
-6. Defer deploy / paid AI / auth until after the hackathon demo path is solid.
+1. Run localhost and attach `public/demo-files/03-stage-and-next-step-update.pdf` through Ask Dawn.  
+2. Run the 2-minute demo sequence end-to-end.  
+3. Polish UI only where it helps the live demo; avoid big refactors.  
+4. Keep session ID ready for submission.  
+5. Defer deploy / paid AI / auth until after the hackathon demo path is solid.
 
 ---
 

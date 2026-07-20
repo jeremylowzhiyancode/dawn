@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Awaiting, Contact, ContactTitle, DawnSettings, Hospital, Stage, StoredFile } from "./DawnApp";
+import type { Contact, ContactTitle, DawnSettings, Hospital, Stage, StoredFile } from "./DawnApp";
 import { contactTitles, nextStepOptions, stages } from "./DawnApp";
 
 function singaporeDateInputValue() {
