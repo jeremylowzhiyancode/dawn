@@ -1,4 +1,7 @@
-# Hospital Onboarding — Clear Path from Interest to Live
+# Hospital Onboarding - Clear Path from Interest to Live
+
+> **To view the visual page:** start Dawn, then open http://127.0.0.1:3000/onboarding  
+> (Clicking the `.html` file in GitHub/Cursor only shows code.)
 
 **One page. One owner per step. No hospital left waiting.**
 
@@ -77,4 +80,4 @@ Parallel track — confirm before we promise it in kickoff.
 ---
 
 **Working tracker:** keep the Excel as the live tick-box checklist per hospital.  
-**Visual page:** open [`hospital-onboarding-one-pager.html`](hospital-onboarding-one-pager.html) in a browser (print-friendly).
+**Visual page:** http://127.0.0.1:3000/onboarding (see [HOW_TO_OPEN.md](HOW_TO_OPEN.md)).
