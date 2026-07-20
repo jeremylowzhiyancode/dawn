@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Awaiting, Contact, ContactTitle, DawnSettings, Hospital, Stage, StoredFile } from "./DawnApp";
-import { contactTitles, nextStepOptions, stages } from "./DawnApp";
+import { contactTitles, CountryField, nextStepOptions, stages } from "./DawnApp";
 
 function nextStepsFor(stage: Stage, substage: string) {
   const nextStepBySubstage: Record<string, string> = {
@@ -40,17 +40,49 @@ function DownloadIcon() {
   );
 }
 
-export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, substageOptions }: { hospital: Hospital; onSave: (hospital: Hospital) => void; onDelete: (id: string) => void; canUndo: boolean; onUndo: () => void; substageOptions: Record<Stage, string[]> }) {
+export function HospitalDetail({
+  hospital,
+  onSave,
+  onDelete,
+  canUndo,
+  onUndo,
+  substageOptions,
+  focus,
+}: {
+  hospital: Hospital;
+  onSave: (hospital: Hospital) => void;
+  onDelete: (id: string) => void;
+  canUndo: boolean;
+  onUndo: () => void;
+  substageOptions: Record<Stage, string[]>;
+  focus?: { tab?: "details" | "contacts" | "activity"; contactId?: string };
+}) {
   const [draft, setDraft] = useState(hospital);
-  const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
+  const [expandedContactId, setExpandedContactId] = useState<string | null>(focus?.contactId ?? null);
   const [isCustomNextStep, setCustomNextStep] = useState(!nextStepOptions.includes(hospital.nextStep));
-  const [activeTab, setActiveTab] = useState<"details" | "contacts" | "activity">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "contacts" | "activity">(focus?.tab ?? "details");
+  const contactCardRefs = useRef(new Map<string, HTMLDivElement>());
   const [draftUndo, setDraftUndo] = useState<Hospital[]>([]);
   const [isAddingInteraction, setAddingInteraction] = useState(false);
   const [interactionText, setInteractionText] = useState("");
   const [interactionTitle, setInteractionTitle] = useState("");
   const [interactionDate, setInteractionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expandedInteractionId, setExpandedInteractionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(hospital);
+  }, [hospital]);
+
+  useEffect(() => {
+    if (focus?.tab) setActiveTab(focus.tab);
+    if (focus?.contactId) setExpandedContactId(focus.contactId);
+  }, [hospital.id, focus?.tab, focus?.contactId]);
+
+  useEffect(() => {
+    if (activeTab !== "contacts" || !expandedContactId) return;
+    const node = contactCardRefs.current.get(expandedContactId);
+    node?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeTab, expandedContactId, draft.contacts.length]);
 
   function updateDraft(updater: (current: Hospital) => Hospital) {
     setDraft((current) => {
@@ -135,14 +167,28 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
 
   function addInteraction() {
     const text = interactionText.trim();
-    if (!text) return;
+    const title = interactionTitle.trim() || "Manual update";
+    if (!text && !interactionTitle.trim()) return;
+    const id = `manual-${Date.now()}`;
     updateDraft((current) => ({
       ...current,
-      evidence: [{ id: `manual-${Date.now()}`, label: interactionTitle.trim() || "Manual update", text, at: interactionDate, kind: "note" }, ...current.evidence],
+      evidence: [{ id, label: title, text: text || title, at: interactionDate, kind: "note" }, ...current.evidence],
+      audit: [
+        {
+          id: `audit-${id}`,
+          at: new Date().toLocaleString("en-SG", { hour: "numeric", minute: "2-digit", hour12: true, day: "numeric", month: "short", year: "numeric" }),
+          by: "Demo user",
+          action: `Added interaction: ${title}`,
+          source: "Manual update",
+        },
+        ...current.audit,
+      ],
     }));
     setInteractionText("");
     setInteractionTitle("");
+    setInteractionDate(new Date().toISOString().slice(0, 10));
     setAddingInteraction(false);
+    setExpandedInteractionId(id);
   }
 
   function updateInteraction(id: string, field: "label" | "text" | "at", value: string) {
@@ -181,6 +227,10 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
 
       {activeTab === "details" ? <>
       <section className="form-section">
+        <label>
+          <span>Country</span>
+          <CountryField key={hospital.id} value={draft.country} onChange={(value) => updateField("country", value)} />
+        </label>
         <label>
           <span>Stage</span>
           <select value={draft.stage} onChange={(event) => updateStage(event.target.value as Stage)}>
@@ -269,11 +319,15 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
       </> : null}
 
       {activeTab === "contacts" ? <section className="form-section">
-        <div className="section-title-row">
-          <button className="mini-action plus-action" type="button" aria-label="Add contact" title="Add contact" onClick={addContact}>+</button>
-        </div>
         {draft.contacts.map((contact) => (
-          <div className="contact-card" key={contact.id}>
+          <div
+            className="contact-card"
+            key={contact.id}
+            ref={(node) => {
+              if (node) contactCardRefs.current.set(contact.id, node);
+              else contactCardRefs.current.delete(contact.id);
+            }}
+          >
             <div className="contact-summary">
               <input value={contact.name} placeholder="Contact name" onFocus={() => setExpandedContactId(contact.id)} onChange={(event) => updateContact(contact.id, "name", event.target.value)} />
               <button className="contact-expand" type="button" onClick={() => setExpandedContactId((current) => current === contact.id ? null : contact.id)} aria-expanded={expandedContactId === contact.id}>
@@ -303,6 +357,7 @@ export function HospitalDetail({ hospital, onSave, onDelete, canUndo, onUndo, su
             ) : null}
           </div>
         ))}
+        <button className="mini-action plus-action" type="button" aria-label="Add contact" title="Add contact" onClick={addContact}>+</button>
       </section> : null}
 
       {activeTab === "activity" ? <section>
@@ -533,13 +588,26 @@ export function NewHospitalDrawer({ onCreate, substageOptions }: { onCreate: (ho
 
   function addInteraction() {
     const text = interactionText.trim();
-    if (!text) return;
+    const title = interactionTitle.trim() || "Manual update";
+    if (!text && !interactionTitle.trim()) return;
+    const id = `manual-${Date.now()}`;
     setDraft((current) => ({
       ...current,
-      evidence: [{ id: `manual-${Date.now()}`, label: interactionTitle.trim() || "Manual update", text, at: interactionDate, kind: "note" }, ...current.evidence],
+      evidence: [{ id, label: title, text: text || title, at: interactionDate, kind: "note" }, ...current.evidence],
+      audit: [
+        {
+          id: `audit-${id}`,
+          at: new Date().toLocaleString("en-SG", { hour: "numeric", minute: "2-digit", hour12: true, day: "numeric", month: "short", year: "numeric" }),
+          by: "Demo user",
+          action: `Added interaction: ${title}`,
+          source: "Manual update",
+        },
+        ...current.audit,
+      ],
     }));
     setInteractionText("");
     setInteractionTitle("");
+    setInteractionDate(new Date().toISOString().slice(0, 10));
     setAddingInteraction(false);
   }
 
@@ -575,6 +643,10 @@ export function NewHospitalDrawer({ onCreate, substageOptions }: { onCreate: (ho
         <label>
           <span>Hospital name</span>
           <input autoFocus value={draft.name} placeholder="Hospital name" onChange={(event) => updateField("name", event.target.value)} />
+        </label>
+        <label>
+          <span>Country</span>
+          <CountryField key={draft.id} value={draft.country} onChange={(value) => updateField("country", value)} />
         </label>
         <label>
           <span>Stage</span>
