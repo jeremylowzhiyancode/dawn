@@ -3,6 +3,7 @@
 import { ChangeEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
+import { extractFileContent } from "./fileText";
 import {
   AuditDrawer as EditableAuditDrawer,
   FileStorageDrawer as EditableFileStorageDrawer,
@@ -119,13 +120,20 @@ type Suggestion = {
   id: string;
   hospitalId: string;
   hospitalName: string;
-  field: "stage" | "nextStep" | "lastInteraction" | "awaiting" | "notes";
+  field: "stage" | "nextStep" | "lastInteraction" | "awaiting" | "notes" | "create";
   currentValue: string;
   suggestedValue: string;
   confidence: number;
   evidence: string;
   conflict?: string;
+  createCountry?: Country;
+  createNextStep?: string;
+  createSummary?: string;
 };
+
+function suggestionFieldLabel(field: Suggestion["field"]): string {
+  return field === "create" ? "New hospital" : field;
+}
 
 type ChatMessage = {
   id: string;
@@ -319,7 +327,7 @@ export default function DawnApp() {
   const [page, setPage] = useState(1);
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [note, setNote] = useState("<strong>High priority</strong><br>☐ Book kickoff for Northbridge<br>☐ Send EAA packet to Harborview<br>☐ Check pilot form at Redwood");
+  const [note, setNote] = useState('<strong>High priority</strong><br><label><input type="checkbox" /> Book kickoff for Northbridge</label><br><label><input type="checkbox" /> Send EAA packet to Harborview</label><br><label><input type="checkbox" /> Check pilot form at Redwood</label>');
   const [composer, setComposer] = useState("");
   const [isNoteOpen, setNoteOpen] = useState(true);
   const [isNoteMenuOpen, setNoteMenuOpen] = useState(false);
@@ -346,6 +354,8 @@ export default function DawnApp() {
       content: "Northbridge kickoff notes\n\n- EAA confirmed\n- Offer two kickoff slots next week\n- Confirm IT attendee\n",
     },
   ]);
+  const [isFileDragging, setFileDragging] = useState(false);
+  const [isReadingFile, setReadingFile] = useState(false);
   const [draggedHospitalId, setDraggedHospitalId] = useState<string | null>(null);
   const [dragOverHospitalId, setDragOverHospitalId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -395,12 +405,6 @@ export default function DawnApp() {
   }, []);
 
   useEffect(() => {
-    if (!note.includes('type="checkbox"')) {
-      setNote('<strong>High priority</strong><br><label><input type="checkbox" /> Book kickoff for Northbridge</label><br><label><input type="checkbox" /> Send EAA packet to Harborview</label><br><label><input type="checkbox" /> Check pilot form at Redwood</label>');
-    }
-  }, []);
-
-  useEffect(() => {
     function collapseUntouchedDawn(event: MouseEvent) {
       const target = event.target as Node;
       if (isDawnExpanded && !chatMessages.length && !composer.trim() && !dawnPanelRef.current?.contains(target)) {
@@ -430,7 +434,10 @@ export default function DawnApp() {
   }, [activeStage, hospitals, query]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / 10));
-  const visibleHospitals = filtered.slice((page - 1) * 10, page * 10);
+  const visibleHospitals = useMemo(
+    () => filtered.slice((page - 1) * 10, page * 10),
+    [filtered, page],
+  );
   const selectedHospital = hospitals.find((hospital) => hospital.id === selectedId) ?? null;
 
   useLayoutEffect(() => {
@@ -581,6 +588,13 @@ export default function DawnApp() {
       return;
     }
 
+    if (isQuestion(text)) {
+      setSuggestions([]);
+      recordChatMessage(buildDawnAnswer(text, hospitals), "assistant");
+      setComposer("");
+      return;
+    }
+
     const nextSuggestions = createSuggestions(text, hospitals);
     setSuggestions(nextSuggestions);
     recordChatMessage(
@@ -639,19 +653,35 @@ export default function DawnApp() {
 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
-    const hospital = inferAttachmentHospital(file.name);
-    if (!hospital) return;
+    if (file) await ingestFile(file);
+    event.target.value = "";
+  }
+
+  async function ingestFile(file: File) {
+    setDawnExpanded(true);
+    setReadingFile(true);
+    recordChatMessage(`Reading ${file.name}…`, "assistant");
+
+    const extracted = await extractFileContent(file);
+    const basis = extracted.ok ? `${file.name}\n${extracted.text}` : file.name;
+    const mentioned = findMentionedHospital(basis, hospitals);
+    const evidenceKind: EvidenceItem["kind"] = extracted.kind === "image" ? "image" : "file";
+    const snippet = extracted.ok ? extracted.text.replace(/\s+/g, " ").trim().slice(0, 600) : "";
     const data = await file.arrayBuffer();
-    const kind = file.type.startsWith("image/") ? "image" : "file";
-    const interaction: EvidenceItem = {
-      id: `interaction-${Date.now()}`,
-      label: file.name,
-      text: `Attached through Dawn AI and linked to ${hospital.name}.`,
-      at: today.toISOString().slice(0, 10),
-      kind,
-    };
-    attachInteraction(hospital.id, interaction);
+
+    const fileHospitalId = mentioned?.id ?? "unfiled";
+    const fileHospitalName = mentioned?.name ?? detectNewHospitalName(basis, hospitals) ?? "Unfiled lead";
+
+    if (mentioned) {
+      attachInteraction(mentioned.id, {
+        id: `interaction-${Date.now()}`,
+        label: file.name,
+        text: snippet ? `${extracted.method}: ${snippet}` : `Attached through Dawn AI and linked to ${mentioned.name}.`,
+        at: today.toISOString().slice(0, 10),
+        kind: evidenceKind,
+      });
+    }
+
     setUploadedFiles((current) => [
       {
         id: `file-${Date.now()}`,
@@ -660,16 +690,33 @@ export default function DawnApp() {
         size: file.size,
         uploadedAt: timestampNow(),
         source: "Dawn AI",
-        hospitalId: hospital.id,
-        hospitalName: hospital.name,
+        hospitalId: fileHospitalId,
+        hospitalName: fileHospitalName,
+        content: snippet || undefined,
         data,
       },
       ...current,
     ]);
-    recordChatMessage(`Attached ${file.name} to ${hospital.name}.`);
-    setDawnExpanded(true);
-    setSuggestions(createSuggestions(`Uploaded file: ${file.name} for ${hospital.name}`, hospitals, file.name));
-    event.target.value = "";
+
+    const nextSuggestions = createSuggestions(basis, hospitals, file.name);
+    setSuggestions(nextSuggestions);
+
+    let summary: string;
+    if (extracted.ok) {
+      const readable = extracted.method.charAt(0).toLowerCase() + extracted.method.slice(1);
+      if (nextSuggestions.length) {
+        const count = nextSuggestions.length === 1 ? "1 suggested change" : `${nextSuggestions.length} suggested changes`;
+        summary = `I ${readable} in ${file.name} and prepared ${count} below for your approval.`;
+      } else {
+        summary = `I ${readable} in ${file.name} but couldn't find a clear change to suggest, so nothing was updated.`;
+      }
+    } else if (extracted.kind === "image") {
+      summary = `I saved ${file.name}, but couldn't read the image text automatically (OCR needs an internet connection). You can still open the record and add details.`;
+    } else {
+      summary = `I saved ${file.name}, but couldn't read its contents automatically. You can still open the record and add details.`;
+    }
+    recordChatMessage(summary, "assistant");
+    setReadingFile(false);
   }
 
   function downloadStoredFile(file: StoredFile) {
@@ -748,7 +795,12 @@ export default function DawnApp() {
     setLastSnapshot(hospitals);
     setHospitals((current) => applySuggestion(current, suggestion));
     dismissSuggestion(suggestion.id);
-    recordChatMessage(`Done — ${suggestion.hospitalName}'s ${suggestion.field} is now updated.`, "assistant");
+    recordChatMessage(
+      suggestion.field === "create"
+        ? `Done — I added ${suggestion.suggestedValue} as a new hospital.`
+        : `Done — ${suggestion.hospitalName}'s ${suggestionFieldLabel(suggestion.field)} is now updated.`,
+      "assistant",
+    );
   }
 
   function approveAll() {
@@ -806,10 +858,38 @@ export default function DawnApp() {
   }
 
   return (
-    <main className={`dawn-app stage-${activeStage.toLowerCase()}`}>
+    <main
+      className={`dawn-app stage-${activeStage.toLowerCase()}`}
+      onDragOver={(event) => {
+        if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+        event.preventDefault();
+        if (!isFileDragging) setFileDragging(true);
+      }}
+      onDragLeave={(event) => {
+        const next = event.relatedTarget as Node | null;
+        if (next && event.currentTarget.contains(next)) return;
+        setFileDragging(false);
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return;
+        event.preventDefault();
+        setFileDragging(false);
+        void ingestFile(event.dataTransfer.files[0]);
+      }}
+    >
       <div className="sunrise-field" aria-hidden="true">
         <span className="moving-sun" />
       </div>
+
+      {isFileDragging ? (
+        <div className="file-drop-overlay" aria-hidden="true">
+          <div className="file-drop-card">
+            <PaperclipIcon />
+            <b>Drop the file — Dawn will read it</b>
+            <span>PDF, Excel, PowerPoint, Word, notes, or an image</span>
+          </div>
+        </div>
+      ) : null}
 
       <header className="topbar">
         <button className="brand" aria-label="Dawn AI home" onClick={() => handleStage("All")}>
@@ -928,9 +1008,10 @@ export default function DawnApp() {
                   setDragOverHospitalId(null);
                 }}
                 onDragOver={(event) => {
+                  if (!draggedHospitalId) return;
                   event.preventDefault();
                   event.dataTransfer.dropEffect = "move";
-                  setDragOverHospitalId(hospital.id);
+                  if (dragOverHospitalId !== hospital.id) setDragOverHospitalId(hospital.id);
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
@@ -1076,6 +1157,7 @@ export default function DawnApp() {
                   ) : (
                     <p className="chat-empty">Use the microphone for a voice note, type a quick update, or drop a file. Dawn will do the rest.</p>
                   )}
+                  {isReadingFile ? <p className="chat-message assistant chat-reading">Reading your file…</p> : null}
                 </div>
                 {suggestions.length ? (
                   <section className="chat-suggestions" aria-label="Dawn suggested changes">
@@ -1091,7 +1173,7 @@ export default function DawnApp() {
                         <div className="chat-suggestion-title">
                           <b>{suggestion.hospitalName}</b>
                           <div>
-                            <span>{suggestion.field}</span>
+                            <span>{suggestionFieldLabel(suggestion.field)}</span>
                             <button
                               className="open-hospital-button"
                               aria-label={`Open ${suggestion.hospitalName}`}
@@ -1198,13 +1280,72 @@ export default function DawnApp() {
   );
 }
 
+function findMentionedHospital(text: string, hospitals: Hospital[]): Hospital | null {
+  const lower = text.toLowerCase();
+  return (
+    hospitals.find((hospital) => {
+      const name = hospital.name.toLowerCase();
+      const distinctiveWord = name.split(/[^a-z]+/).find((word) => word.length >= 6);
+      return lower.includes(name) || Boolean(distinctiveWord && lower.includes(distinctiveWord));
+    }) ?? null
+  );
+}
+
+const ORG_KEYWORDS = "Hospital|Hospitals|Medical Center|Medical Centre|Medical|Clinic|Institute|Healthcare|Health System|Health Centre|Health Center|Health";
+
+function detectNewHospitalName(text: string, hospitals: Hospital[]): string | null {
+  const regex = new RegExp(
+    `\\b([A-Z][A-Za-z&'.-]+(?:\\s+[A-Z][A-Za-z&'.-]+){0,3}\\s+(?:${ORG_KEYWORDS}))\\b`,
+    "g",
+  );
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const candidate = match[1].replace(/\s+/g, " ").trim();
+    const lower = candidate.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const exists = hospitals.some((hospital) => {
+      const name = hospital.name.toLowerCase();
+      const distinctiveWord = name.split(/[^a-z]+/).find((word) => word.length >= 6);
+      return name === lower || lower.includes(name) || name.includes(lower) || Boolean(distinctiveWord && lower.includes(distinctiveWord));
+    });
+    if (!exists) return candidate;
+  }
+  return null;
+}
+
+function detectCountry(lower: string): Country | undefined {
+  return countries.find((country) => lower.includes(country.toLowerCase()));
+}
+
+function detectNextStep(lower: string): string {
+  if (/\b(eaa|loi|agreement|data agreement)\b.*\b(signed|complete|approved)\b/.test(lower)) return "Schedule kickoff";
+  if (/\bkickoff\b.*\b(scheduled|booked|confirmed)\b/.test(lower)) return "Prepare kickoff deck";
+  if (/\bpilot\b/.test(lower)) return "Confirm pilot readiness";
+  return "Send EAA packet";
+}
+
 function createSuggestions(text: string, hospitals: Hospital[], source = "Messy note"): Suggestion[] {
   const lower = text.toLowerCase();
-  const mentioned = hospitals.find((hospital) => {
-    const name = hospital.name.toLowerCase();
-    const distinctiveWord = name.split(/[^a-z]+/).find((word) => word.length >= 6);
-    return lower.includes(name) || Boolean(distinctiveWord && lower.includes(distinctiveWord));
-  });
+  const mentioned = findMentionedHospital(text, hospitals);
+
+  if (!mentioned) {
+    const newName = detectNewHospitalName(text, hospitals);
+    if (newName) {
+      return [
+        buildCreateSuggestion(
+          newName,
+          detectCountry(lower),
+          detectNextStep(lower),
+          text.replace(/\s+/g, " ").trim().slice(0, 180),
+          82,
+          source,
+        ),
+      ];
+    }
+  }
+
   const target = mentioned ?? [...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a))[0];
   if (!target) return [];
 
@@ -1253,7 +1394,86 @@ function buildSuggestion(
   };
 }
 
-function applySuggestion(hospitals: Hospital[], suggestion: Suggestion) {
+function buildCreateSuggestion(
+  name: string,
+  country: Country | undefined,
+  nextStep: string,
+  summary: string,
+  confidence: number,
+  source: string,
+): Suggestion {
+  return {
+    id: `create-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    hospitalId: `new-${Date.now()}`,
+    hospitalName: name,
+    field: "create",
+    currentValue: "New hospital",
+    suggestedValue: name,
+    confidence,
+    evidence: source,
+    conflict: "This looks like a new hospital. Approving will create a fresh record you can edit.",
+    createCountry: country,
+    createNextStep: nextStep,
+    createSummary: summary,
+  };
+}
+
+function isQuestion(text: string): boolean {
+  const trimmed = text.trim().toLowerCase();
+  if (!trimmed) return false;
+  if (trimmed.endsWith("?")) return true;
+  return /^(what|which|who|when|where|why|how many|how much|how's|hows|show|list|tell me|give me|summar|status|do i|are there|is there|what's|whats|any )/.test(trimmed);
+}
+
+function describeHospitalLine(hospital: Hospital): string {
+  const owner = hospital.awaiting === "us" ? "waiting on us" : "waiting on hospital";
+  return `• ${hospital.name} — ${hospital.nextStep} (${hospital.substage}, ${owner})`;
+}
+
+function buildDawnAnswer(text: string, hospitals: Hospital[]): string {
+  const lower = text.toLowerCase();
+  const byPriority = [...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a));
+  const waitingOnUs = byPriority.filter((hospital) => hospital.awaiting === "us");
+  const waitingOnHospital = byPriority.filter((hospital) => hospital.awaiting === "hospital");
+
+  if (/how many|count|number of|how's it|hows it|overview|snapshot|breakdown/.test(lower)) {
+    const byStage = stages.map((stage) => `${hospitals.filter((hospital) => hospital.stage === stage).length} ${stage}`).join(", ");
+    return `You're tracking ${hospitals.length} hospitals: ${byStage}.\n${waitingOnUs.length} ${waitingOnUs.length === 1 ? "is" : "are"} waiting on us right now.`;
+  }
+
+  if (/waiting on (the )?hospital|their court|waiting on them|on their side/.test(lower)) {
+    if (!waitingOnHospital.length) return "Nothing is waiting on the hospital side right now.";
+    return `${waitingOnHospital.length} ${waitingOnHospital.length === 1 ? "site is" : "sites are"} waiting on the hospital:\n${waitingOnHospital.slice(0, 5).map(describeHospitalLine).join("\n")}`;
+  }
+
+  if (/waiting on us|on us|cannot slip|can't slip|cant slip|slip|urgent|asap|our court|my court|overdue|behind/.test(lower)) {
+    if (!waitingOnUs.length) return "Good news — nothing is waiting on us right now. The ball is in the hospitals' court.";
+    return `${waitingOnUs.length} ${waitingOnUs.length === 1 ? "thing is" : "things are"} waiting on us — start here:\n${waitingOnUs.slice(0, 5).map(describeHospitalLine).join("\n")}`;
+  }
+
+  const focus = (waitingOnUs.length ? waitingOnUs : byPriority).slice(0, 3);
+  const tail = waitingOnUs.length ? `\n\n${waitingOnUs.length} of your sites are waiting on us, so those come first.` : "";
+  return `Here's what I'd focus on first:\n${focus.map(describeHospitalLine).join("\n")}${tail}\n\nI haven't changed any records — just ask if you want me to update something.`;
+}
+
+function applySuggestion(hospitals: Hospital[], suggestion: Suggestion): Hospital[] {
+  if (suggestion.field === "create") {
+    const name = suggestion.suggestedValue.trim();
+    if (!name || hospitals.some((hospital) => hospital.name.toLowerCase() === name.toLowerCase())) return hospitals;
+    const created = createHospital(
+      `h-${Date.now()}${Math.floor(Math.random() * 1000)}`,
+      name,
+      suggestion.createCountry ?? "Singapore",
+      "Interest",
+      "Agreements sent",
+      suggestion.createNextStep ?? "Send EAA packet",
+      "2026-07-18",
+      suggestion.createSummary || "Added from a dropped file",
+      "us",
+      suggestion.createSummary || "Created by Dawn from an imported file.",
+    );
+    return [created, ...hospitals];
+  }
   return hospitals.map((hospital) => {
     if (hospital.id !== suggestion.hospitalId) return hospital;
     const next = { ...hospital };
@@ -1322,7 +1542,7 @@ function ReviewModal({
             <article className="suggestion" key={suggestion.id}>
               <div>
                 <b>{suggestion.hospitalName}</b>
-                <span>{suggestion.field}</span>
+                <span>{suggestionFieldLabel(suggestion.field)}</span>
               </div>
               <input value={suggestion.suggestedValue} onChange={(event) => onEdit(suggestion.id, event.target.value)} />
               <small>

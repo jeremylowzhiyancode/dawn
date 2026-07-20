@@ -1367,6 +1367,46 @@ h1 {
   backdrop-filter: blur(10px);
 }
 
+.file-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 24, 34, 0.42);
+  backdrop-filter: blur(6px);
+  animation: drawerBackdropIn 160ms ease-out both;
+  pointer-events: none;
+}
+
+.file-drop-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 30px 42px;
+  border-radius: 24px;
+  background: rgba(255, 252, 248, 0.98);
+  box-shadow: 0 28px 70px rgba(112, 27, 27, 0.32);
+  color: #23343e;
+  text-align: center;
+}
+
+.file-drop-card svg {
+  width: 34px;
+  height: 34px;
+  color: var(--orange);
+}
+
+.file-drop-card b {
+  font-size: 18px;
+}
+
+.file-drop-card span {
+  color: rgba(31, 37, 43, 0.62);
+  font-size: 13px;
+}
+
 .chat-focus-backdrop {
   position: fixed;
   inset: 0;
@@ -1439,6 +1479,7 @@ h1 {
   color: white;
   font-size: 15px;
   line-height: 1.45;
+  white-space: pre-line;
 }
 
 .chat-message.assistant {
