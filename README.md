@@ -60,7 +60,7 @@ This project was built for **OpenAI Build Week**. **Codex** (GPT-5.6) was the pr
 
 ### Where Codex accelerated the workflow
 
-- **Spec-driven start** — We gave Codex our hospital onboarding plan and business context (`onboarding/Hospital-Onboarding-Plan.md`) so the product matched real process stages, not a generic task app.  
+- **Spec-driven start** — We gave Codex our hospital onboarding plan and business context so the product matched real process stages, not a generic task app.  
 - **End-to-end implementation** — Codex scaffolded the Next.js app, built the dashboard, drawers, chat panel, file ingest, and `/api/parse` route in rapid iteration sessions.  
 - **Bug fixes under deadline** — Layout overlap (chat vs notepad), hospital names wrongly detected as contacts, decoy rows in CSVs, LOI vs EAA confusion, and TypeScript build errors were diagnosed and fixed with Codex in the same session.  
 - **Demo readiness** — Codex helped trim the demo to reliable paths (CSV + chat), polish copy, and deploy to Vercel with production env vars.  
@@ -110,12 +110,9 @@ Libraries: `xlsx` (spreadsheets), `jszip` (export), Web Speech API (voice)
 
 ```
 dawn/
-├── dawn-scaffold/          # Next.js app (run from here)
-│   ├── src/app/            # DawnApp, Drawers, API routes
-│   └── sample-drops/       # Demo CSV and files
-├── onboarding/             # Hospital onboarding plan (Codex context)
-├── HACKATHON-SUBMISSION.md # Submission checklist
-└── TEST-CHECKLIST-2026-07-21.md
+└── dawn-scaffold/          # Next.js app (run from here)
+    ├── src/app/            # DawnApp, Drawers, API routes
+    └── sample-drops/       # Demo CSV and Word files
 ```
 
 ---

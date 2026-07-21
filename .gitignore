@@ -4,6 +4,7 @@ tmp/
 node_modules/
 .npm-cache/
 .cursor/
+onboarding/
 dawn-scaffold/.next/
 dawn-scaffold/node_modules/
 dawn-scaffold/.env*
