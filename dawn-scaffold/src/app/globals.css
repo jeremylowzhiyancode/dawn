@@ -405,15 +405,30 @@ button {
   max-height: calc(100dvh - 28px);
 }
 
+/* When chat is open: two fixed rows — notepad on top, chat fills the rest. Never overlap. */
+.right-rail:has(.dawn-sidecar.is-expanded) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+}
+
 .right-rail:has(.dawn-sidecar.is-expanded) .note-panel {
-  flex: 0 1 auto;
+  grid-row: 1;
   min-height: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .right-rail:has(.dawn-sidecar.is-expanded) .note-editor {
   height: auto;
-  min-height: 0;
-  max-height: min(160px, 20vh);
+  min-height: 120px;
+  max-height: min(180px, 22vh);
+  overflow-y: auto;
+}
+
+.right-rail:has(.dawn-sidecar.is-expanded) .dawn-sidecar {
+  grid-row: 2;
+  align-self: stretch;
 }
 
 .note-panel,
@@ -1161,9 +1176,11 @@ h1 {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  margin-top: 0;
   flex-direction: column;
   gap: 10px;
   padding: 14px;
+  overflow: hidden;
 }
 
 .dawn-sidecar.is-expanded .chat-thread {
@@ -1171,6 +1188,7 @@ h1 {
   min-height: 0;
   max-height: none;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dawn-sidecar.is-expanded .chat-composer {
@@ -1186,7 +1204,7 @@ h1 {
 
 .dawn-sidecar.is-expanded.has-suggestions .chat-thread {
   flex: 1 1 auto;
-  min-height: 120px;
+  min-height: 0;
 }
 
 .dawn-sidecar.is-expanded.has-suggestions .chat-suggestions {
@@ -1336,6 +1354,7 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .chat-expand-btn,
@@ -1390,6 +1409,8 @@ h1 {
 }
 
 .dawn-sidecar .chat-thread {
+  display: flex;
+  flex-direction: column;
   min-height: 132px;
   max-height: 192px;
   justify-content: flex-start;
@@ -1397,12 +1418,7 @@ h1 {
   padding: 2px;
   overflow-y: auto;
   scroll-behavior: smooth;
-}
-
-.dawn-sidecar.is-expanded .chat-thread,
-.dawn-sidecar.has-activity .chat-thread {
-  min-height: 112px;
-  max-height: none;
+  overscroll-behavior: contain;
 }
 
 .dawn-sidecar .chat-thread.is-overflowing {

@@ -73,6 +73,10 @@ Rules:
 - "waiting on us" means our team must act; "waiting on hospital" means they must act.
 - Use contacts[] for new or updated people. action=create for someone new at the site; action=update when matching an existing contact by matchName or contactId from the known list.
 - If the note mentions a person's name with an email address and/or role/title (CRC, PI, etc.), you MUST include a contacts[] item — do not leave contact details only in lastInteraction or notes.
+- NEVER use a hospital or site name as a contact person name (e.g. "Brightwater Regional" is NOT a person — it is part of "Brightwater Regional Hospital").
+- Duplicate spreadsheet rows for the same hospital are one site update — never turn a duplicate row into a contact.
+- "Signed the LOI" and "send the EAA packet" in the same note means LOI was signed, EAA was NOT signed yet — lastInteraction should say LOI signed; nextStep should be Send EAA packet.
+- When a document says "Next step:" include a nextStep change with that value (normalize to Send EAA packet or Schedule kickoff when appropriate).
 - Voice notes are messy speech-to-text: strip filler words (okay, um, like), fix obvious transcription errors, and extract "called X hospital" as hospital name X Hospital — never include words like "called", "with the", or "new" in the hospital name.
 - When the user describes a NEW hospital and a contact in the same message, set isNewHospital=true and include the contact in contacts[] for that new site.
 - Prefer matching an existing known hospital name. Only set isNewHospital=true when it is clearly a different site.
@@ -226,6 +230,31 @@ export async function POST(request: Request) {
     return Response.json({ configured: true, error: "empty text" }, { status: 400 });
   }
 
+  const lower = text.trim().toLowerCase();
+  if (
+    /\bpriorit(y|ies)?\b/.test(lower) ||
+    (/\b(today|right now)\b/.test(lower) && /\b(what|my|our|focus|should|important)\b/.test(lower))
+  ) {
+    if (!/\b(met|spoke|signed|sent|called|emailed|updated)\b/.test(lower)) {
+      return Response.json({
+        configured: true,
+        localOnly: true,
+        result: {
+          answer: null,
+          hospitalName: null,
+          isNewHospital: false,
+          country: null,
+          changes: [],
+          contacts: [],
+          summary: "Dashboard priority question — answered locally in Dawn, not by GPT.",
+          items: [],
+        },
+        provider,
+        model: undefined,
+      });
+    }
+  }
+
   const primaryModel =
     process.env.AI_MODEL ??
     (provider === "ollama" ? "llama3.2" : provider === "openai" ? "gpt-4.1-nano" : "openai/gpt-4.1-mini");
@@ -248,7 +277,7 @@ export async function POST(request: Request) {
       : inputKind === "spreadsheet"
         ? "INPUT TYPE: spreadsheet with MULTIPLE ROWS. Return items[] with one entry per real row. Skip decoy rows. Match existing Known hospitals; create new ones only when not listed.\n\n"
         : inputKind === "file"
-          ? "INPUT TYPE: extracted file text. If it contains multiple spreadsheet rows, use items[]. Ignore decoy/gibberish rows.\n\n"
+          ? "INPUT TYPE: extracted file text. Use ONLY the real update section. Sections marked DECOY, NOISE, FOOTER, or 'ignore for hospital records' must be skipped entirely — never create Moonbase, Zorpington, or Atlantis. Match existing Known hospitals when the file is about them.\n\n"
           : "";
 
   const userContent = `${voicePreamble}Known hospitals: ${(body.hospitalNames ?? []).slice(0, 60).join(", ") || "(none)"}

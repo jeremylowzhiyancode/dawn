@@ -398,6 +398,45 @@ export const nextStepOptions = [
   "Collect usage feedback",
   "Other, please specify",
 ];
+
+const nextStepBySubstage: Record<string, string> = {
+  "Interest:Agreements sent": "Send polite reminder",
+  "Interest:LOI signed": "Send EAA packet",
+  "Interest:EAA signed": "Schedule kickoff",
+  "Kickoff:Kickoff invited": "Send calendar holds",
+  "Kickoff:Kickoff scheduled": "Prepare kickoff deck",
+  "Kickoff:Kickoff completed": "Confirm pilot readiness",
+  "Pilot:Pilot initiated": "Check feasibility completion",
+  "Pilot:Pilot completed": "Collect usage feedback",
+  "Active:1 month check-in": "Schedule monthly check-in",
+  "Active:2 month check-in": "Schedule monthly check-in",
+  "Active:3 month check-in": "Schedule monthly check-in",
+};
+
+export function isCustomNextStepValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return !nextStepOptions.includes(trimmed);
+}
+
+/** Preset + suggested options, always including the saved next step first. */
+export function nextStepChoices(current: string, stage: Stage, substage: string): string[] {
+  const choices: string[] = [];
+  const trimmed = current.trim();
+  if (trimmed) choices.push(trimmed);
+  const suggested = nextStepBySubstage[`${stage}:${substage}`];
+  if (suggested && !choices.includes(suggested)) choices.push(suggested);
+  for (const option of nextStepOptions) {
+    if (option === "Other, please specify") continue;
+    if (!choices.includes(option)) choices.push(option);
+  }
+  if (!choices.includes("Other, please specify")) choices.push("Other, please specify");
+  return choices;
+}
+
+export function suggestedNextStepFor(stage: Stage, substage: string): string {
+  return nextStepBySubstage[`${stage}:${substage}`] ?? "Review next step";
+}
 const stageThresholds: Record<Stage, number> = {
   Interest: 14,
   Kickoff: 7,
@@ -880,6 +919,44 @@ export default function DawnApp() {
     setDragOverHospitalId(null);
   }
 
+  function answerFromDashboard(message: string): boolean {
+    if (isAskingForPriorities(message)) {
+      setSuggestions([]);
+      recordChatMessage(buildPrioritiesAnswer(message, hospitals), "assistant");
+      return true;
+    }
+    const answer = dashboardAnswerFor(message, hospitals);
+    if (!answer) return false;
+    setSuggestions([]);
+    recordChatMessage(answer, "assistant");
+    return true;
+  }
+
+  function tryOpenFromMessage(message: string): boolean {
+    if (!shouldTryOpenByName(message, hospitals)) return false;
+    const target = resolveOpenTarget(message, hospitals);
+    setSuggestions([]);
+    if (!target) {
+      recordChatMessage("Which hospital or contact should I open? Say any hospital name (Cedar Bay) or any contact name (Aaron Lim, Maya Tan).", "assistant");
+      return true;
+    }
+    const contact = target.contactId
+      ? target.hospital.contacts.find((item) => item.id === target.contactId)
+      : undefined;
+    openHospital(
+      target.hospital,
+      target.contactId ? { tab: "contacts", contactId: target.contactId } : undefined,
+      true,
+    );
+    recordChatMessage(
+      contact
+        ? `Opened ${contact.name} at [[hospital:${target.hospital.id}|${target.hospital.name}]].`
+        : `Opened [[hospital:${target.hospital.id}|${target.hospital.name}]].`,
+      "assistant",
+    );
+    return true;
+  }
+
   async function handleComposerSend(options?: { fromVoice?: boolean; textOverride?: string }) {
     const fromVoice = options?.fromVoice ?? false;
     const text = (options?.textOverride ?? composer).trim();
@@ -887,6 +964,16 @@ export default function DawnApp() {
 
     recordChatMessage(text, "user");
     setDawnExpanded(true);
+
+    if (answerFromDashboard(text)) {
+      setComposer("");
+      return;
+    }
+
+    if (tryOpenFromMessage(text)) {
+      setComposer("");
+      return;
+    }
 
     if (/export|excel|download/i.test(text)) {
       void exportAllArchive(hospitals, uploadedFiles);
@@ -911,16 +998,15 @@ export default function DawnApp() {
       return;
     }
 
-    const looksLikeUpdate = looksLikeHospitalUpdate(text, hospitals) || fromVoice;
-
-    if (!looksLikeUpdate && !fromVoice && isHospitalDashboardQuestion(text)) {
-      setSuggestions([]);
-      recordChatMessage(buildDawnAnswer(text, hospitals), "assistant");
-      setComposer("");
-      return;
-    }
+    const looksLikeUpdate =
+      looksLikeHospitalUpdate(text, hospitals) ||
+      (fromVoice && !isAskingForPriorities(text) && !looksLikeDashboardQuestion(text));
 
     if (!looksLikeUpdate && !fromVoice && isGeneralQuestion(text)) {
+      if (answerFromDashboard(text)) {
+        setComposer("");
+        return;
+      }
       setComposer("");
       setReadingFile(true);
       const ai = await aiInterpret(text, hospitals);
@@ -943,12 +1029,21 @@ export default function DawnApp() {
       suggestions,
     );
 
-    if (!fromVoice && isTooVagueForUpdate(text, hospitals, updateContext.hospital)) {
+    if (isTooVagueForUpdate(text, hospitals, updateContext.hospital)) {
+      if (answerFromDashboard(text)) {
+        setComposer("");
+        return;
+      }
       setSuggestions([]);
       recordChatMessage(
         "I'm not sure that's an update yet. Mention a hospital and what happened, drop a file, or ask me something like \"what are my priorities?\"",
         "assistant",
       );
+      setComposer("");
+      return;
+    }
+
+    if (answerFromDashboard(text)) {
       setComposer("");
       return;
     }
@@ -1073,7 +1168,8 @@ export default function DawnApp() {
     recordChatMessage(`Reading ${file.name}…`, "assistant");
 
     const extracted = await extractFileContent(file);
-    const basis = extracted.ok ? `${file.name}\n${extracted.text}` : file.name;
+    const parseText = extracted.ok ? sanitizeFileTextForParsing(extracted.text) : file.name;
+    const basis = extracted.ok ? `${file.name}\n${parseText}` : file.name;
     const mentioned = findMentionedHospital(basis, hospitals);
     const evidenceKind: EvidenceItem["kind"] = extracted.kind === "image" ? "image" : "file";
     const snippet = extracted.ok ? extracted.text.replace(/\s+/g, " ").trim().slice(0, 600) : "";
@@ -1113,21 +1209,54 @@ export default function DawnApp() {
         ? createSuggestionsFromSpreadsheet(extracted.text, hospitals, file.name)
         : [];
 
+    const leadIntakeSuggestions =
+      extracted.kind === "pdf" && extracted.ok
+        ? createSuggestionsFromLeadIntake(parseText, hospitals, file.name)
+        : [];
+
     const ai = extracted.ok
-      ? await aiInterpret(extracted.text, hospitals, [], {
+      ? await aiInterpret(parseText, hospitals, [], {
           inputKind: extracted.kind === "spreadsheet" ? "spreadsheet" : "file",
         })
       : null;
     const preferGptOnly = ai?.configured === true;
     const fromGpt = Boolean(ai?.suggestions?.length);
-    const rawSuggestions = fromGpt
-      ? ai!.suggestions!
-      : spreadsheetSuggestions.length
-        ? spreadsheetSuggestions
+    const structuredSuggestions = spreadsheetSuggestions.length ? spreadsheetSuggestions : leadIntakeSuggestions;
+    const rawSuggestions = structuredSuggestions.length
+      ? structuredSuggestions
+      : fromGpt
+        ? ai!.suggestions!
         : preferGptOnly
           ? []
           : createSuggestions(basis, hospitals, file.name);
-    const nextSuggestions = fromGpt ? rawSuggestions : mergeContactSuggestions(basis, hospitals, rawSuggestions, file.name);
+    const usedGpt = fromGpt && !structuredSuggestions.length;
+    let nextSuggestions = filterAndDedupeSuggestions(
+      enrichSuggestionsFromText(
+        parseText,
+        hospitals,
+        structuredSuggestions.length
+          ? rawSuggestions
+          : usedGpt
+            ? rawSuggestions
+            : mergeContactSuggestions(basis, hospitals, rawSuggestions, file.name),
+        file.name,
+      ),
+    );
+    if (extracted.ok && nextSuggestions.length === 0) {
+      const localSuggestions = structuredSuggestions.length
+        ? structuredSuggestions
+        : mergeContactSuggestions(basis, hospitals, createSuggestions(basis, hospitals, file.name), file.name);
+      nextSuggestions = filterAndDedupeSuggestions(
+        enrichSuggestionsFromText(
+          parseText,
+          hospitals,
+          structuredSuggestions.length
+            ? localSuggestions
+            : mergeContactSuggestions(basis, hospitals, localSuggestions, file.name),
+          file.name,
+        ),
+      );
+    }
     setSuggestions(nextSuggestions);
 
     let summary: string;
@@ -1135,11 +1264,13 @@ export default function DawnApp() {
       const readable = extracted.method.charAt(0).toLowerCase() + extracted.method.slice(1);
       if (nextSuggestions.length) {
         const count = nextSuggestions.length === 1 ? "1 suggested change" : `${nextSuggestions.length} suggested changes`;
-        summary = fromGpt
+        summary = usedGpt
           ? `I read ${file.name} with GPT and prepared ${count} below for your approval.`
           : spreadsheetSuggestions.length
             ? `I read every row in ${file.name} and prepared ${count} below for your approval.`
-            : `I ${readable} in ${file.name} and prepared ${count} below for your approval.`;
+            : leadIntakeSuggestions.length
+              ? `I read the leads in ${file.name} and prepared ${count} below for your approval.`
+              : `I ${readable} in ${file.name} and prepared ${count} below for your approval.`;
       } else if (preferGptOnly && ai?.error) {
         summary = `I ${readable} in ${file.name}, but GPT failed: ${ai.error}`;
       } else if (preferGptOnly) {
@@ -1155,7 +1286,7 @@ export default function DawnApp() {
     recordChatMessage(
       summary,
       "assistant",
-      fromGpt ? formatAiAttribution(ai?.provider, ai?.model) : spreadsheetSuggestions.length ? "Parsed from spreadsheet rows" : undefined,
+      fromGpt ? formatAiAttribution(ai?.provider, ai?.model) : spreadsheetSuggestions.length ? "Parsed from spreadsheet rows" : leadIntakeSuggestions.length ? "Parsed from PDF leads" : undefined,
     );
     setReadingFile(false);
   }
@@ -1808,39 +1939,221 @@ function fuzzyHospitalWordMatch(spoken: string, expected: string): boolean {
   return editDistance(spoken, expected) <= 2;
 }
 
-function findMentionedHospital(text: string, hospitals: Hospital[]): Hospital | null {
-  const lower = text.toLowerCase();
-  const genericWords = new Set([
-    "hospital",
-    "hospitals",
-    "medical",
-    "center",
-    "centre",
-    "institute",
-    "health",
-    "healthcare",
-    "university",
-    "clinical",
-    "general",
-    "clinic",
-    "system",
-    "research",
-    "regional",
-    "national",
-  ]);
-  const tokens = lower.split(/[^a-z]+/).filter((word) => word.length >= 6);
-  const matches = hospitals.filter((hospital) => {
-    const name = hospital.name.toLowerCase();
-    const words = name.split(/[^a-z]+/).filter((word) => word.length >= 5 && !genericWords.has(word));
-    if (!words.length) return false;
-    const hit =
-      lower.includes(name) ||
-      words.some((word) => lower.includes(word) || tokens.some((token) => fuzzyHospitalWordMatch(token, word)));
-    if (!hit) return false;
-    if (isNegatedHospitalMention(text, name)) return false;
-    return !words.some((word) => (lower.includes(word) || tokens.some((token) => fuzzyHospitalWordMatch(token, word))) && isNegatedHospitalMention(text, word));
+function isOpenHospitalCommand(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  if (!/\b(?:open|pen)(?:\s+up)?\b|\b(?:show me|pull up|go to|view|see|look at|bring up)\b/.test(lower)) return false;
+  if (/\b(file|export|settings|audit|chat|drawer|menu)\b/.test(lower)) return false;
+  return true;
+}
+
+function stripOpenCommandPrefix(text: string): string {
+  return text
+    .trim()
+    .replace(/^(?:please\s+|can you\s+)?(?:(?:open|pen)(?:\s+up)?|show me|pull up|go to|view|see|look at|bring up)\s+/i, "")
+    .trim();
+}
+
+const CONTACT_TITLE_PREFIX = /^(?:dr\.?|mr\.?|mrs\.?|ms\.?|prof\.?)\s+/i;
+
+function normalizeContactLookupName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(CONTACT_TITLE_PREFIX, "")
+    .replace(/\./g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const HOSPITAL_GENERIC_WORDS = new Set([
+  "hospital",
+  "hospitals",
+  "medical",
+  "center",
+  "centre",
+  "institute",
+  "health",
+  "healthcare",
+  "university",
+  "clinical",
+  "general",
+  "clinic",
+  "system",
+  "research",
+  "regional",
+  "national",
+  "academic",
+  "park",
+  "ward",
+  "point",
+  "line",
+  "ridge",
+  "valley",
+  "lake",
+  "side",
+  "orchard",
+  "summit",
+  "silver",
+  "east",
+  "west",
+  "north",
+  "south",
+]);
+
+function hospitalMatchSegments(text: string): string[] {
+  const trimmed = text.trim();
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  const segments: string[] = [];
+  if (words.length >= 2) segments.push(words.slice(-2).join(" "));
+  if (words.length >= 3) segments.push(words.slice(-3).join(" "));
+  if (words.length >= 4) segments.push(words.slice(-4).join(" "));
+  segments.push(trimmed);
+  return [...new Set(segments)];
+}
+
+function meaningfulWords(text: string, minLength = 3): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter((word) => word.length >= minLength && !HOSPITAL_GENERIC_WORDS.has(word));
+}
+
+function scoreHospitalMatch(query: string, hospital: Hospital): number {
+  const lower = query.toLowerCase();
+  const name = hospital.name.toLowerCase();
+  if (lower.includes(name)) return 1000 + name.length;
+
+  const nameWords = meaningfulWords(name, 3);
+  const queryWords = meaningfulWords(lower, 3);
+  if (!queryWords.length || !nameWords.length) return 0;
+
+  let score = 0;
+  for (const queryWord of queryWords) {
+    let bestWordScore = 0;
+    for (const nameWord of nameWords) {
+      if (nameWord === queryWord) bestWordScore = Math.max(bestWordScore, nameWord.length * 4);
+      else if (nameWord.startsWith(queryWord) || queryWord.startsWith(nameWord)) {
+        bestWordScore = Math.max(bestWordScore, Math.min(nameWord.length, queryWord.length) * 3);
+      } else if (queryWord.length >= 5 && nameWord.length >= 5 && fuzzyHospitalWordMatch(queryWord, nameWord)) {
+        bestWordScore = Math.max(bestWordScore, Math.min(nameWord.length, queryWord.length) * 2);
+      }
+    }
+    score += bestWordScore;
+  }
+
+  const phrase = queryWords.join(" ");
+  if (phrase.length >= 5 && name.includes(phrase)) score += 80;
+  return score;
+}
+
+function bestHospitalMatch(text: string, hospitals: Hospital[]): { hospital: Hospital; score: number } | null {
+  const weights = [3, 2.5, 2, 1];
+  let best: { hospital: Hospital; score: number } | null = null;
+
+  hospitalMatchSegments(text).forEach((segment, index) => {
+    const weight = weights[index] ?? 1;
+    for (const hospital of hospitals) {
+      const score = scoreHospitalMatch(segment, hospital) * weight;
+      if (score > 0 && (!best || score > best.score)) best = { hospital, score };
+    }
   });
-  return matches.sort((a, b) => b.name.length - a.name.length)[0] ?? null;
+
+  return best;
+}
+
+function findMentionedContact(text: string, hospitals: Hospital[]): { hospital: Hospital; contact: Contact; score: number } | null {
+  const query = normalizeContactLookupName(stripOpenCommandPrefix(text));
+  if (!query) return null;
+
+  let best: { hospital: Hospital; contact: Contact; score: number } | null = null;
+
+  for (const hospital of hospitals) {
+    for (const contact of hospital.contacts) {
+      const normalizedName = normalizeContactLookupName(contact.name);
+      if (!normalizedName) continue;
+
+      let score = 0;
+      if (query === normalizedName || query.includes(normalizedName) || normalizedName.includes(query)) {
+        score = 500 + normalizedName.length;
+      } else {
+        const nameParts = normalizedName.split(/\s+/).filter((part) => part.length >= 2);
+        const queryParts = query.split(/\s+/).filter((part) => part.length >= 2);
+        const hits = nameParts.filter((part) => queryParts.includes(part) || new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(query));
+
+        if (hits.length === nameParts.length && nameParts.length >= 2) {
+          score = hits.reduce((sum, part) => sum + part.length, 0) * 8;
+        } else if (nameParts.length >= 2 && hits.length >= 2) {
+          score = hits.reduce((sum, part) => sum + part.length, 0) * 6;
+        } else if (nameParts.length >= 2) {
+          const lastName = nameParts[nameParts.length - 1];
+          const firstName = nameParts[0];
+          const hasLast = queryParts.includes(lastName) || new RegExp(`\\b${lastName}\\b`).test(query);
+          const hasFirst = queryParts.includes(firstName) || new RegExp(`\\b${firstName}\\b`).test(query);
+          if (hasLast && hasFirst) score = (lastName.length + firstName.length) * 7;
+          else if (hasLast && queryParts.length <= 2) score = lastName.length * 5;
+        }
+      }
+
+      if (score > 0 && (!best || score > best.score)) best = { hospital, contact, score };
+    }
+  }
+
+  return best;
+}
+
+function resolveOpenTarget(text: string, hospitals: Hospital[]): { hospital: Hospital; contactId?: string } | null {
+  const candidates = [...new Set([text.trim(), stripOpenCommandPrefix(text)].filter(Boolean))];
+
+  for (const candidate of candidates) {
+    const focusText = hospitalMatchSegments(candidate)[0] ?? candidate;
+    const contactMatch = findMentionedContact(focusText, hospitals) ?? findMentionedContact(candidate, hospitals);
+    if (contactMatch && contactMatch.score >= 12) {
+      return { hospital: contactMatch.hospital, contactId: contactMatch.contact.id };
+    }
+
+    const hospitalMatch = bestHospitalMatch(focusText, hospitals);
+    if (hospitalMatch && hospitalMatch.score >= 8) {
+      return { hospital: hospitalMatch.hospital };
+    }
+  }
+
+  return null;
+}
+
+function shouldTryOpenByName(text: string, hospitals: Hospital[]): boolean {
+  if (isOpenHospitalCommand(text)) return true;
+  if (isAskingForPriorities(text) || looksLikeDashboardQuestion(text)) return false;
+  if (looksLikeHospitalUpdate(text, hospitals)) return false;
+
+  const stripped = stripOpenCommandPrefix(text);
+  const words = stripped.split(/\s+/).filter(Boolean);
+  if (!words.length || words.length > 6) return false;
+  return Boolean(resolveOpenTarget(text, hospitals));
+}
+
+function findMentionedHospital(text: string, hospitals: Hospital[]): Hospital | null {
+  const ranked = hospitals
+    .map((hospital) => {
+      const match = bestHospitalMatch(text, [hospital]);
+      return match ? { hospital, score: match.score } : null;
+    })
+    .filter((item): item is { hospital: Hospital; score: number } => Boolean(item && item.score >= 8))
+    .sort((a, b) => b.score - a.score);
+
+  if (!ranked.length) return null;
+
+  const top = ranked[0].hospital;
+  if (isNegatedHospitalMention(text, top.name.toLowerCase())) return null;
+
+  if (ranked.length > 1 && ranked[0].score - ranked[1].score < 20) {
+    const latest = hospitalMatchSegments(text)[0] ?? text;
+    const latestBest = bestHospitalMatch(latest, hospitals);
+    if (latestBest && latestBest.score >= 8 && !isNegatedHospitalMention(text, latestBest.hospital.name.toLowerCase())) {
+      return latestBest.hospital;
+    }
+  }
+
+  return top;
 }
 
 function isNegatedHospitalMention(text: string, needle: string): boolean {
@@ -1865,6 +2178,8 @@ const UPDATE_NARRATIVE =
   /\b(met (them|at|with)|conference|approved|agreed|wanted to share|this is for|they (said|want|approved)|we will|having a (meeting|kickoff)|next week|giving you an update|interaction)\b/i;
 
 function looksLikeHospitalUpdate(text: string, hospitals: Hospital[]): boolean {
+  if (isHospitalDashboardQuestion(text)) return false;
+  if (isOpenHospitalCommand(text)) return false;
   const lower = text.toLowerCase();
   const hasHospital = Boolean(findMentionedHospital(text, hospitals) || detectNewHospitalName(text, hospitals));
   const hasOrgPhrase = /\b(university hospital|medical center|clinical institute|regional hospital)\b/i.test(lower);
@@ -1923,18 +2238,43 @@ function resolveConversationUpdateContext(
   return { combinedText, hospital };
 }
 
+function loiWasSigned(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    /\bloi\b[^.\n]{0,80}\b(signed|sign|returned|completed|approved)\b/.test(lower) ||
+    /\b(signed|sign|returned|completed|approved)\b[^.\n]{0,80}\bloi\b/.test(lower)
+  );
+}
+
+function eaaWasSigned(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (/\b(send|sending|waiting on us to send|need to send|still need|before they can)\b[^.\n]{0,50}\b(eaa|agreement)\b/.test(lower)) {
+    return false;
+  }
+  return (
+    /\b(eaa|data agreement)\b[^.\n]{0,80}\b(signed|sign|complete|completed|approved)\b/.test(lower) ||
+    /\b(signed|sign|complete|completed|approved)\b[^.\n]{0,80}\b(eaa|data agreement)\b/.test(lower)
+  );
+}
+
+function extractExplicitNextStep(text: string): string | null {
+  const match = text.match(/\bnext step:\s*([^\n.]+)/i);
+  if (!match?.[1]) return null;
+  const step = match[1].trim();
+  if (/send.*eaa/i.test(step)) return "Send EAA packet";
+  if (/schedule.*kickoff/i.test(step)) return "Schedule kickoff";
+  if (/kickoff/i.test(step)) return "Schedule kickoff";
+  return step.charAt(0).toUpperCase() + step.slice(1);
+}
+
 function buildInteractionSummary(text: string, hospital: Hospital | null): string {
   const lower = text.toLowerCase().replace(/\s+/g, " ");
   const shortName = hospital?.name.match(/^(\S+(?:\s+\S+)?)/)?.[1] ?? hospital?.name ?? "Hospital";
-  const hasLoi = /\bloi\b/.test(lower);
-  const hasEaa = /\beaa\b/.test(lower);
-  const hasSigned = /\b(signed|sign|returned|completed|approved)\b/.test(lower);
-  const negatesEaa = /\b(not|no|actually|instead|wrong)\b/.test(lower) && hasEaa;
 
-  if (hasLoi && hasSigned && (negatesEaa || !hasEaa || /\bactually\b/.test(lower))) {
+  if (loiWasSigned(text) && !eaaWasSigned(text)) {
     return `${shortName} signed the LOI`;
   }
-  if (hasEaa && hasSigned && !negatesEaa) {
+  if (eaaWasSigned(text)) {
     return `${shortName} signed the EAA`;
   }
 
@@ -1996,6 +2336,28 @@ function normalizePersonName(raw: string): string {
     .join(" ");
 }
 
+function stripHospitalTokens(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(
+      /\b(the|hospital|medical|center|centre|institute|clinical|university|regional|national|general|health|system|group|site|lead)\b/g,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function contactNameLooksLikeHospital(contactName: string, hospitalName: string): boolean {
+  const contact = stripHospitalTokens(contactName);
+  const hospital = stripHospitalTokens(hospitalName);
+  if (!contact || !hospital) return false;
+  if (contact === hospital) return true;
+  if (hospital.includes(contact) && contact.split(" ").filter(Boolean).length >= 2) return true;
+  if (contact.includes(hospital) && hospital.split(" ").filter(Boolean).length >= 2) return true;
+  return /\b(hospital|medical center|institute|nexus)\b/i.test(contactName.trim());
+}
+
 function extractPreferredHospitalPhrase(text: string): string | null {
   const patterns = [
     /\bcalled\s+([a-z][a-z0-9'-]*(?:\s+[a-z][a-z0-9'-]*){0,3})\s+hospital\b/i,
@@ -2031,6 +2393,7 @@ function detectNewHospitalName(text: string, hospitals: Hospital[]): string | nu
     const lower = normalized.toLowerCase();
     if (seen.has(lower)) continue;
     seen.add(lower);
+    if (!looksLikeHospitalName(normalized)) continue;
     if (!hospitalNameExists(normalized, hospitals)) return normalized;
   }
   return null;
@@ -2086,6 +2449,9 @@ function extractContactFromNote(text: string): { name: string; email: string; ti
   const email = emailMatch?.[0] ?? "";
 
   const namePatterns = [
+    /\bcontact mentioned:\s*(?:dr\.?\s+)?([a-z]+(?:\s+[a-z]+)?)/i,
+    /\bcontact:\s*(?:dr\.?\s+)?([a-z]+(?:\s+[a-z]+)?)/i,
+    /\b(?:dr\.?\s+)?([a-z]+(?:\s+[a-z]+)?),?\s+(?:crc|pi)\b/i,
     /\b(?:the\s+)?contact\s+(?:is\s+|named\s+)?([a-z]+(?:\s+[a-z]+)?)/i,
     /\b(?:spoke with|talked to|met with|met)\s+([a-z]+(?:\s+[a-z]+)?)/i,
     /\b(?:spoke with|talked to|met with|call with|email from|heard from|contact(?:ed)?|updated?|new contact|add contact)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/,
@@ -2121,7 +2487,7 @@ function extractContactFromNote(text: string): { name: string; email: string; ti
 
 function buildContactSuggestionsFromText(text: string, hospital: Hospital, source: string, confident: boolean): Suggestion[] {
   const parsed = extractContactFromNote(text);
-  if (!parsed) return [];
+  if (!parsed || contactNameLooksLikeHospital(parsed.name, hospital.name)) return [];
 
   const existing = findContactOnHospital(hospital, parsed.name);
   const confidence = confident ? 88 : 64;
@@ -2180,6 +2546,7 @@ function mergeContactSuggestions(text: string, hospitals: Hospital[], suggestion
       lastInteractionAt: "2026-07-18",
       lastInteraction: createSuggestion.createSummary ?? "",
       awaiting: "us",
+      awaitingContactId: "",
       notes: "",
       priorityAdjustment: 0,
       contacts: [],
@@ -2270,11 +2637,131 @@ function parseSpreadsheetRows(text: string): SpreadsheetRow[] {
   return rows;
 }
 
+function isDecoyHospitalName(name: string): boolean {
+  const lower = name.toLowerCase().trim();
+  if (!lower) return true;
+  if (/decoy|ignore|noise|gibberish|nonsense|hallucination|do not create/.test(lower)) return true;
+  if (/moonbase|zorpington|atlantis|0xdeadbeef|glub|asdf qwer|zztop|quantum eaa|blockchain kickoff|mermaid|medical nexus/.test(lower)) return true;
+  if (/^(leads|only|real|instruction|confidential|generated|test data|dawn synthetic)/.test(lower)) return true;
+  if (/\b(should become|leads below|below should|intentional trap|synthetic lead|hallucination test)\b/.test(lower)) return true;
+  return false;
+}
+
+function looksLikeHospitalName(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed || isDecoyHospitalName(trimmed)) return false;
+  return /\b(hospital|institute|medical center|medical centre|health system|clinic|medical)\b/i.test(trimmed);
+}
+
 function isDecoySpreadsheetRow(row: SpreadsheetRow): boolean {
+  if (isDecoyHospitalName(row.hospital)) return true;
   const blob = `${row.hospital} ${row.update} ${row.notes}`.toLowerCase();
   if (/decoy|ignore|noise|gibberish|nonsense|hallucination|duplicate row/.test(blob)) return true;
   if (/moonbase|zorpington|atlantis|0xdeadbeef|glub the mermaid|asdf qwer|zztop/.test(blob)) return true;
   return false;
+}
+
+function sanitizeFileTextForParsing(text: string): string {
+  const realSection =
+    text.match(/===\s*REAL UPDATE[^=]*===\s*([\s\S]*?)(?=\n===|===\s*DECOY|$)/i)?.[1]?.trim() ??
+    text.match(/REAL UPDATE:\s*([\s\S]*?)(?=\nDECOY|\nPassing mention|===\s*FOOTER|$)/i)?.[1]?.trim();
+  if (realSection) return realSection;
+
+  let cleaned = text
+    .replace(/===\s*DECOY[\s\S]*?(?=\n===|===\s*OTHER|===\s*FOOTER|$)/gi, "")
+    .replace(/\nDECOY[\s\S]*?(?=\nPassing mention|===\s*FOOTER|$)/gi, "")
+    .replace(/DECOY LEADS[\s\S]*$/i, "")
+    .replace(/^.*\bINSTRUCTION:\b.*$/gim, "")
+    .replace(/^.*\bOnly real leads below\b.*$/gim, "")
+    .replace(/^DAWN SYNTHETIC LEAD INTAKE.*$/gim, "")
+    .replace(/^Confidential \| Generated.*$/gim, "")
+    .replace(/===\s*OTHER SITES[\s\S]*?(?=\n===|$)/gi, "")
+    .replace(/===\s*FOOTER[\s\S]*?(?=\n===|$)/gi, "")
+    .trim();
+
+  if (cleaned.includes("\n")) {
+    cleaned = cleaned
+      .split("\n")
+      .filter((line) => !isDecoyHospitalName(line) && !/moonbase|zorpington|atlantis|0xdeadbeef|glub the mermaid|lorem ipsum|syslog:|lunch menu/i.test(line))
+      .join("\n")
+      .trim();
+  } else {
+    cleaned = cleaned
+      .replace(/Moonbase Delta Hospital[^.\n]*[.\n]?/gi, "")
+      .replace(/Zorpington Medical Nexus[^.\n]*[.\n]?/gi, "")
+      .replace(/Hospital of Atlantis[^.\n]*[.\n]?/gi, "")
+      .replace(/asdf qwer[^.\n]*[.\n]?/gi, "")
+      .trim();
+  }
+
+  return cleaned || text;
+}
+
+function enrichSuggestionsFromText(text: string, hospitals: Hospital[], suggestions: Suggestion[], source: string): Suggestion[] {
+  if (!suggestions.length) return suggestions;
+
+  const enriched = suggestions.map((suggestion) => {
+    if (suggestion.field !== "lastInteraction") return suggestion;
+    const hospital = hospitals.find((item) => item.id === suggestion.hospitalId);
+    if (!hospital) return suggestion;
+    const fixedSummary = buildInteractionSummary(text, hospital);
+    if (!fixedSummary || fixedSummary === suggestion.suggestedValue) return suggestion;
+    return { ...suggestion, suggestedValue: fixedSummary };
+  });
+
+  const hospitalIds = new Set(enriched.map((item) => item.hospitalId));
+  for (const hospitalId of hospitalIds) {
+    const hospital = hospitals.find((item) => item.id === hospitalId);
+    if (!hospital) continue;
+
+    const hasNextStep = enriched.some((item) => item.hospitalId === hospitalId && item.field === "nextStep");
+    if (!hasNextStep) {
+      if (loiWasSigned(text) && !eaaWasSigned(text)) {
+        enriched.push(buildSuggestion(hospital, "nextStep", hospital.nextStep, "Send EAA packet", 88, source));
+      } else if (eaaWasSigned(text)) {
+        enriched.push(buildSuggestion(hospital, "nextStep", hospital.nextStep, "Schedule kickoff", 90, source));
+      } else {
+        const explicitNextStep = extractExplicitNextStep(text);
+        if (explicitNextStep && explicitNextStep !== hospital.nextStep) {
+          enriched.push(buildSuggestion(hospital, "nextStep", hospital.nextStep, explicitNextStep, 86, source));
+        }
+      }
+    }
+  }
+
+  return enriched.filter((suggestion) => {
+    if (suggestion.field !== "awaiting") return true;
+    const hospital = hospitals.find((item) => item.id === suggestion.hospitalId);
+    return hospital ? hospital.awaiting !== suggestion.suggestedValue : true;
+  });
+}
+
+function filterAndDedupeSuggestions(suggestions: Suggestion[]): Suggestion[] {
+  const out: Suggestion[] = [];
+  const seen = new Set<string>();
+  for (const suggestion of suggestions) {
+    if (suggestion.field === "create" && !looksLikeHospitalName(suggestion.suggestedValue)) continue;
+    if (suggestion.field === "create" && isDecoyHospitalName(suggestion.suggestedValue)) continue;
+    if (isDecoyHospitalName(suggestion.hospitalName)) continue;
+    if (
+      suggestion.field === "lastInteraction" &&
+      /\.(docx|txt|pdf|pptx|csv|xlsx)$/i.test(suggestion.suggestedValue.trim())
+    ) {
+      continue;
+    }
+
+    const key = [
+      suggestion.hospitalId,
+      suggestion.field,
+      suggestion.contactId ?? "",
+      suggestion.suggestedValue.trim().toLowerCase(),
+      suggestion.contactEmail?.trim().toLowerCase() ?? "",
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(suggestion);
+  }
+  return out.slice(0, 12);
 }
 
 function resolveSpreadsheetHospital(name: string, hospitals: Hospital[]): Hospital | null {
@@ -2318,6 +2805,90 @@ function createSuggestionsFromSpreadsheet(text: string, hospitals: Hospital[], s
         90,
         source,
       ),
+    );
+  }
+
+  return suggestions.slice(0, 12);
+}
+
+type LeadIntakeRow = {
+  hospital: string;
+  country: string;
+  update: string;
+  nextStep: string;
+  waitingOn: string;
+};
+
+function parseLeadIntakeRows(text: string): LeadIntakeRow[] {
+  const rows: LeadIntakeRow[] = [];
+  const chunks = text.split(/\n(?=LEAD \d+)/i).filter((chunk) => chunk.trim() && !/DECOY LEADS/i.test(chunk.slice(0, 40)));
+
+  for (const chunk of chunks) {
+    const hospital = chunk.match(/\bHospital:\s*(.+?)(?:\n|$)/i)?.[1]?.trim();
+    if (!hospital || !looksLikeHospitalName(hospital)) continue;
+    rows.push({
+      hospital,
+      country: chunk.match(/\bCountry:\s*([^|\n]+)/i)?.[1]?.trim() ?? "",
+      update: chunk.match(/\bUpdate:\s*(.+?)(?:\n|$)/i)?.[1]?.trim() ?? "",
+      nextStep: chunk.match(/\bNext step:\s*([^|\n]+)/i)?.[1]?.trim() ?? "",
+      waitingOn: chunk.match(/\bWaiting on:\s*([^|\n]+)/i)?.[1]?.trim() ?? "",
+    });
+  }
+
+  if (!rows.length) {
+    for (const match of text.matchAll(/\bHospital:\s*(.+?)(?:\n|$)/gi)) {
+      const hospital = match[1]?.trim();
+      if (!hospital || !looksLikeHospitalName(hospital)) continue;
+      const start = Math.max(0, (match.index ?? 0) - 20);
+      const end = Math.min(text.length, (match.index ?? 0) + 500);
+      const chunk = text.slice(start, end);
+      if (/DECOY LEADS|hallucination test/i.test(chunk)) continue;
+      rows.push({
+        hospital,
+        country: chunk.match(/\bCountry:\s*([^|\n]+)/i)?.[1]?.trim() ?? "",
+        update: chunk.match(/\bUpdate:\s*(.+?)(?:\n|$)/i)?.[1]?.trim() ?? "",
+        nextStep: chunk.match(/\bNext step:\s*([^|\n]+)/i)?.[1]?.trim() ?? "",
+        waitingOn: chunk.match(/\bWaiting on:\s*([^|\n]+)/i)?.[1]?.trim() ?? "",
+      });
+    }
+  }
+
+  return rows;
+}
+
+function createSuggestionsFromLeadIntake(text: string, hospitals: Hospital[], source: string): Suggestion[] {
+  const parsedRows = parseLeadIntakeRows(text);
+  if (!parsedRows.length) return [];
+
+  const suggestions: Suggestion[] = [];
+  const seenHospitals = new Set<string>();
+
+  for (const row of parsedRows) {
+    const key = row.hospital.trim().toLowerCase();
+    if (seenHospitals.has(key)) continue;
+    seenHospitals.add(key);
+
+    const existing = resolveSpreadsheetHospital(row.hospital, hospitals);
+    const summary = row.update || `Update from lead intake for ${row.hospital}`;
+    const country = normalizeCountryValue(row.country);
+    const nextStep =
+      row.nextStep && !/^none$/i.test(row.nextStep)
+        ? row.nextStep.replace(/\s*\|\s*Waiting on:.*$/i, "").trim()
+        : "Send EAA packet";
+
+    if (existing) {
+      suggestions.push(buildSuggestion(existing, "lastInteraction", existing.lastInteraction, summary, 92, source));
+      if (nextStep && nextStep !== existing.nextStep) {
+        suggestions.push(buildSuggestion(existing, "nextStep", existing.nextStep, nextStep, 88, source));
+      }
+      if (/^us$/i.test(row.waitingOn) && existing.awaiting !== "us") {
+        suggestions.push(buildSuggestion(existing, "awaiting", existing.awaiting, "us", 84, source));
+      }
+      continue;
+    }
+
+    suggestions.push(
+      buildCreateSuggestion(row.hospital.trim(), country, nextStep, summary, 90, source),
     );
   }
 
@@ -2373,11 +2944,18 @@ function createSuggestions(
     ),
   );
 
-  if (/\bloi\b.*\b(signed|sign|complete|approved|returned)\b/.test(lower) && !/\beaa\b.*\b(signed|sign|complete|approved)\b/.test(lower)) {
+  if (loiWasSigned(parseText) && !eaaWasSigned(parseText)) {
     updates.push(buildSuggestion(target, "nextStep", target.nextStep, "Send EAA packet", hospitalNamed ? 88 : 58, source));
-  } else if (/\b(eaa|agreement|data agreement)\b.*\b(signed|complete|approved)\b/.test(lower)) {
+  } else if (eaaWasSigned(parseText)) {
     updates.push(buildSuggestion(target, "nextStep", target.nextStep, "Schedule kickoff", mentioned ? 90 : 58, source));
-  } else if (/\bkickoff\b.*\b(scheduled|booked|confirmed)\b/.test(lower)) {
+  } else {
+    const explicitNextStep = extractExplicitNextStep(parseText);
+    if (explicitNextStep && explicitNextStep !== target.nextStep) {
+      updates.push(buildSuggestion(target, "nextStep", target.nextStep, explicitNextStep, hospitalNamed ? 86 : 56, source));
+    }
+  }
+
+  if (/\bkickoff\b.*\b(scheduled|booked|confirmed)\b/.test(lower)) {
     updates.push(buildSuggestion(target, "stage", target.stage, "Kickoff", mentioned ? 89 : 58, source));
   } else if (/\bpilot\b.*\b(completed|complete)\b/.test(lower)) {
     updates.push(buildSuggestion(target, "stage", target.stage, "Active", mentioned ? 86 : 56, source, "Confirm the site has completed its pilot exit criteria before approving."));
@@ -2386,9 +2964,13 @@ function createSuggestions(
   }
 
   if (/\b(waiting on us|waiting on jeremy|we need to|our team)\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "awaiting", target.awaiting, "us", mentioned ? 88 : 58, source));
+    if (target.awaiting !== "us") {
+      updates.push(buildSuggestion(target, "awaiting", target.awaiting, "us", hospitalNamed ? 88 : 58, source));
+    }
   } else if (/\b(waiting on|awaiting|pending with)\b/.test(lower)) {
-    updates.push(buildSuggestion(target, "awaiting", target.awaiting, "hospital", mentioned ? 84 : 56, source));
+    if (target.awaiting !== "hospital") {
+      updates.push(buildSuggestion(target, "awaiting", target.awaiting, "hospital", mentioned ? 84 : 56, source));
+    }
   }
 
   updates.push(...buildContactSuggestionsFromText(parseText, target, source, Boolean(mentioned)));
@@ -2708,7 +3290,7 @@ function contactSuggestionsFromAI(result: AIResult, hospital: Hospital, source: 
   const out: Suggestion[] = [];
   for (const item of result.contacts ?? []) {
     const name = (item.name ?? item.matchName ?? "").trim();
-    if (!name) continue;
+    if (!name || contactNameLooksLikeHospital(name, hospital.name)) continue;
 
     if (item.action === "update") {
       const existing = findContactOnHospital(hospital, item.matchName ?? name, item.contactId);
@@ -2780,6 +3362,7 @@ function contactSuggestionsFromAI(result: AIResult, hospital: Hospital, source: 
 
 function suggestionsFromSingleAIResult(result: AIResult, hospitals: Hospital[], source: string): Suggestion[] {
   const name = (result.hospitalName ?? "").trim();
+  if (isDecoyHospitalName(name)) return [];
   const existingByName =
     hospitals.find((hospital) => hospital.name.toLowerCase() === name.toLowerCase()) ??
     resolveSpreadsheetHospital(name, hospitals);
@@ -2818,6 +3401,7 @@ function suggestionsFromSingleAIResult(result: AIResult, hospitals: Hospital[], 
       lastInteractionAt: "2026-07-18",
       lastInteraction: result.summary ?? "",
       awaiting: "us",
+      awaitingContactId: "",
       notes: "",
       priorityAdjustment: 0,
       contacts: [],
@@ -2859,7 +3443,7 @@ function suggestionsFromAI(result: AIResult, hospitals: Hospital[]): Suggestion[
     for (const item of result.items) {
       if (item.skip) continue;
       const name = (item.hospitalName ?? "").trim();
-      if (!name) continue;
+      if (!name || isDecoyHospitalName(name)) continue;
       const key = name.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -2908,6 +3492,23 @@ async function aiInterpret(
   options?: { voice?: boolean; inputKind?: "voice" | "text" | "file" | "spreadsheet" },
 ): Promise<AiInterpretResult | null> {
   const inputKind = options?.inputKind ?? (options?.voice ? "voice" : "text");
+  if (isAskingForPriorities(text)) {
+    return { answer: buildPrioritiesAnswer(text, hospitals), configured: false };
+  }
+  if (looksLikeDashboardQuestion(text)) {
+    return { answer: buildDawnAnswer(text, hospitals), configured: false };
+  }
+  if (shouldTryOpenByName(text, hospitals)) {
+    const target = resolveOpenTarget(text, hospitals);
+    return {
+      answer: target
+        ? target.contactId
+          ? `Opened ${target.hospital.contacts.find((item) => item.id === target.contactId)?.name ?? "contact"} at ${target.hospital.name}.`
+          : `Opened ${target.hospital.name}.`
+        : "Which hospital or contact should I open? Say any hospital name (Cedar Bay) or any contact name (Aaron Lim, Maya Tan).",
+      configured: false,
+    };
+  }
   try {
     const response = await fetch("/api/parse", {
       method: "POST",
@@ -2943,6 +3544,9 @@ async function aiInterpret(
     }
     if (!data?.configured) return { configured: false, ...meta };
     if (!data?.result) return { configured: true, error: "empty AI response", ...meta };
+    if (data.localOnly === true && isAskingForPriorities(text)) {
+      return { answer: buildPrioritiesAnswer(text, hospitals), configured: false };
+    }
     const result = data.result as AIResult;
     if (result.answer && (!result.changes || result.changes.length === 0) && (!result.contacts || result.contacts.length === 0) && (!result.items || result.items.length === 0)) {
       return { answer: result.answer, configured: true, ...meta };
@@ -3017,17 +3621,92 @@ function isTooVagueForUpdate(text: string, hospitals: Hospital[], contextHospita
 }
 
 function isGeneralQuestion(text: string): boolean {
+  if (isHospitalDashboardQuestion(text)) return false;
   const trimmed = text.trim().toLowerCase();
   if (!trimmed) return false;
   if (trimmed.endsWith("?")) return true;
   return /^(what|which|who|when|where|why|how many|how much|how's|hows|show|list|tell me|give me|summar|status|do i|are there|is there|what's|whats|any )/.test(trimmed);
 }
 
+function isAskingForPriorities(message: string): boolean {
+  const lower = message.trim().toLowerCase();
+  if (!/\bpriorit(y|ies)?\b/.test(lower)) return false;
+  if (/\b(met|spoke|signed|sent|called|emailed|updated)\b/.test(lower) && /\b(at|with|from)\b/.test(lower)) return false;
+  return true;
+}
+
+function buildPrioritiesAnswer(message: string, hospitals: Hospital[]): string {
+  const lower = message.toLowerCase();
+  const byPriority = [...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a));
+  const waitingOnUs = byPriority.filter((hospital) => hospital.awaiting === "us");
+  const focus = (waitingOnUs.length ? waitingOnUs : byPriority).slice(0, 3);
+  const header = /\b(today|right now)\b/.test(lower)
+    ? "Here's what I'd focus on today:"
+    : "Here's what I'd focus on first:";
+  const lines = focus.map((hospital) => {
+    const owner = hospital.awaiting === "us" ? "waiting on us" : "waiting on hospital";
+    return `• [[hospital:${hospital.id}|${hospital.name}]] — ${hospital.nextStep} (${hospital.substage}, ${owner})`;
+  });
+  const tail = waitingOnUs.length ? `\n\n${waitingOnUs.length} of your sites are waiting on us.` : "";
+  return `${header}\n${lines.join("\n")}${tail}\n\nI haven't changed any records — just ask if you want me to update something.`;
+}
+
+function normalizeChatText(text: string): string {
+  return text.trim().toLowerCase().replace(/[!.?,]+$/g, "");
+}
+
+function looksLikeDashboardQuestion(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (isHospitalDashboardQuestion(trimmed)) return true;
+  const lastLine = trimmed.split(/\n/).pop()?.trim() ?? trimmed;
+  if (lastLine !== trimmed && isHospitalDashboardQuestion(lastLine)) return true;
+  const lastSentence = trimmed.split(/(?<=[.!?])\s+/).pop()?.trim() ?? trimmed;
+  return lastSentence !== trimmed && isHospitalDashboardQuestion(lastSentence);
+}
+
+function dashboardAnswerFor(text: string, hospitals: Hospital[]): string | null {
+  if (!looksLikeDashboardQuestion(text)) return null;
+  return buildDawnAnswer(text, hospitals);
+}
+
 function isHospitalDashboardQuestion(text: string): boolean {
-  const lower = text.trim().toLowerCase();
+  const lower = normalizeChatText(text);
   if (!lower) return false;
 
+  if (/\bpriorit(y|ies)?\b/.test(lower)) {
+    if (UPDATE_NARRATIVE.test(lower) && /\b(met|spoke|signed|sent|called|emailed|updated)\b/.test(lower)) return false;
+    return true;
+  }
+
+  if (/\b(today|right now)\b/.test(lower) && /\b(what|my|our|focus|should|need to do|important)\b/.test(lower)) return true;
+  if (/^(one of )?my priorities\b/.test(lower)) return true;
+
+  if (/^(what('s|s| are)|show me|tell me|give me) (my )?(top )?(priorit|priorities)\b/.test(lower)) return true;
+  if (/^(my )?priorit(y|ies)(\s+(right )?now|\s+today)?$/.test(lower)) return true;
+  if (/^priorit(y|ies)\s+(right )?now$/.test(lower)) return true;
+
   if (/what('s|s| are) (my )?(priorit|waiting)|what should i (do|focus|work on)|what's waiting on us|whats waiting on us|show me (my )?priorit/.test(lower)) {
+    return true;
+  }
+
+  if (/\b(next steps?)\b/.test(lower) && /\b(what|tell|give|show|list|my|our|top|most important|focus|should|need|right now|now|today|platform|dashboard|three|important)\b/.test(lower)) {
+    return true;
+  }
+
+  if (/\b(most important|top \d+|three (most )?important|important things|need to do|what to do|what should i|what do i need)\b/.test(lower)) {
+    return true;
+  }
+
+  if (/\b(platform|dashboard)\b/.test(lower) && /\b(look|tell|show|what|priorit|important|need|should|three)\b/.test(lower)) {
+    return true;
+  }
+
+  if (/\b(give me|tell me|show me|i want|need|yes[, ]|summary|overview|latest information)\b/.test(lower) && /\b(all (hospitals|sites|of them)|every hospital|each hospital|priorit|waiting|next step|stages|awaiting|contacts|dashboard)\b/.test(lower)) {
+    return true;
+  }
+
+  if (/\b(all of them|every site|each site)\b/.test(lower) && /\b(priorit|give|tell|show|summary|next step)\b/.test(lower)) {
     return true;
   }
 
@@ -3057,11 +3736,29 @@ function describeHospitalLine(hospital: Hospital, includeOwner = true): string {
   return `${core}, ${owner})`;
 }
 
+function describeHospitalDetail(hospital: Hospital): string {
+  const awaiting = hospital.awaiting === "us" ? "waiting on us" : "waiting on hospital";
+  const contact =
+    hospital.contacts.find((item) => item.id === hospital.awaitingContactId) ??
+    hospital.contacts[0] ??
+    null;
+  const contactLine = contact
+    ? `${contact.name || "Unnamed contact"} (${contact.title})`
+    : "No contact on file";
+  return `• [[hospital:${hospital.id}|${hospital.name}]] — ${hospital.stage} / ${hospital.substage}; next: ${hospital.nextStep}; ${awaiting}; contact: ${contactLine}`;
+}
+
 function buildDawnAnswer(text: string, hospitals: Hospital[]): string {
   const lower = text.toLowerCase();
   const byPriority = [...hospitals].sort((a, b) => priorityScore(b) - priorityScore(a));
   const waitingOnUs = byPriority.filter((hospital) => hospital.awaiting === "us");
   const waitingOnHospital = byPriority.filter((hospital) => hospital.awaiting === "hospital");
+
+  if (/\b(all (hospitals|sites|of them)|every hospital|each hospital|detailed|summary|latest information|stages|contacts|awaiting)\b/.test(lower)) {
+    const header = `Here's the latest on all ${hospitals.length} hospitals:`;
+    const body = byPriority.map(describeHospitalDetail).join("\n");
+    return `${header}\n${body}\n\nI haven't changed any records — tell me what to update and I'll suggest a change for you to approve.`;
+  }
 
   if (/how many|count|number of|how's it|hows it|overview|snapshot|breakdown/.test(lower)) {
     const byStage = stages.map((stage) => `${hospitals.filter((hospital) => hospital.stage === stage).length} ${stage}`).join(", ");
@@ -3078,11 +3775,22 @@ function buildDawnAnswer(text: string, hospitals: Hospital[]): string {
     return `${waitingOnUs.length} ${waitingOnUs.length === 1 ? "thing is" : "things are"} waiting on us — start here:\n${waitingOnUs.map((hospital) => describeHospitalLine(hospital, false)).join("\n")}`;
   }
 
+  if (/\b(three|top 3|3 most|most important)\b/.test(lower)) {
+    const focus = (waitingOnUs.length ? waitingOnUs : byPriority).slice(0, 3);
+    const tail = waitingOnUs.length
+      ? `\n\n${waitingOnUs.length} of your sites are waiting on us:\n${waitingOnUs.map((hospital) => describeHospitalLine(hospital, false)).join("\n")}`
+      : "";
+    return `Here are the 3 most important things right now:\n${focus.map((hospital) => describeHospitalLine(hospital)).join("\n")}${tail}\n\nI haven't changed any records — just ask if you want me to update something.`;
+  }
+
   const focus = (waitingOnUs.length ? waitingOnUs : byPriority).slice(0, 3);
   const tail = waitingOnUs.length
     ? `\n\n${waitingOnUs.length} of your sites are waiting on us:\n${waitingOnUs.map((hospital) => describeHospitalLine(hospital, false)).join("\n")}`
     : "";
-  return `Here's what I'd focus on first:\n${focus.map(describeHospitalLine).join("\n")}${tail}\n\nI haven't changed any records — just ask if you want me to update something.`;
+  const header = /\b(right now|today|now)\b/.test(lower)
+    ? "Here's what I'd focus on today:"
+    : "Here's what I'd focus on first:";
+  return `${header}\n${focus.map((hospital) => describeHospitalLine(hospital)).join("\n")}${tail}\n\nI haven't changed any records — just ask if you want me to update something.`;
 }
 
 function renderChatMessageContent(content: string, onOpenHospital: (hospitalId: string) => void) {

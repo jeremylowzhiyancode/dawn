@@ -72,9 +72,34 @@ async function extractSlides(file: File): Promise<string> {
 
 async function extractDocument(file: File): Promise<string> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
-  const docEntry = zip.files["word/document.xml"];
+  const docEntry =
+    zip.files["word/document.xml"] ??
+    Object.values(zip.files).find((entry) => /word\/document\.xml$/i.test(entry.name));
   if (!docEntry) return "";
   const xml = await docEntry.async("string");
+  const paragraphs = xml.match(/<w:p[\s>][\s\S]*?<\/w:p>/g) ?? [];
+  if (paragraphs.length) {
+    const lines = paragraphs
+      .map((paragraph) => {
+        const runs = paragraph.match(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g) ?? [];
+        return runs
+          .map((run) =>
+            run
+              .replace(/<w:t(?:\s[^>]*)?>/, "")
+              .replace(/<\/w:t>/, "")
+              .replace(/<[^>]+>/g, "")
+              .replace(/&amp;/g, "&")
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/&quot;/g, '"')
+              .replace(/&#39;/g, "'"),
+          )
+          .join("");
+      })
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length) return lines.join("\n");
+  }
   return pullTags(xml, "w:t");
 }
 

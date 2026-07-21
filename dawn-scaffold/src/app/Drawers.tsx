@@ -2,24 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Awaiting, Contact, ContactTitle, DawnSettings, Hospital, Stage, StoredFile } from "./DawnApp";
-import { contactTitles, CountryField, nextStepOptions, stages } from "./DawnApp";
-
-function nextStepsFor(stage: Stage, substage: string) {
-  const nextStepBySubstage: Record<string, string> = {
-    "Interest:Agreements sent": "Send polite reminder",
-    "Interest:LOI signed": "Send EAA packet",
-    "Interest:EAA signed": "Schedule kickoff",
-    "Kickoff:Kickoff invited": "Schedule kickoff",
-    "Kickoff:Kickoff scheduled": "Prepare kickoff deck",
-    "Kickoff:Kickoff completed": "Confirm pilot readiness",
-    "Pilot:Pilot initiated": "Check feasibility completion",
-    "Pilot:Pilot completed": "Collect usage feedback",
-    "Active:1 month check-in": "Schedule monthly check-in",
-    "Active:2 month check-in": "Schedule monthly check-in",
-    "Active:3 month check-in": "Schedule monthly check-in",
-  };
-  return [nextStepBySubstage[`${stage}:${substage}`] ?? "Review next step", "Other, please specify"];
-}
+import { contactTitles, CountryField, isCustomNextStepValue, nextStepChoices, nextStepOptions, stages } from "./DawnApp";
 
 function TrashIcon() {
   return (
@@ -59,7 +42,7 @@ export function HospitalDetail({
 }) {
   const [draft, setDraft] = useState(hospital);
   const [expandedContactId, setExpandedContactId] = useState<string | null>(focus?.contactId ?? null);
-  const [isCustomNextStep, setCustomNextStep] = useState(!nextStepOptions.includes(hospital.nextStep));
+  const [isCustomNextStep, setCustomNextStep] = useState(() => isCustomNextStepValue(hospital.nextStep));
   const [activeTab, setActiveTab] = useState<"details" | "contacts" | "activity">(focus?.tab ?? "details");
   const contactCardRefs = useRef(new Map<string, HTMLDivElement>());
   const [draftUndo, setDraftUndo] = useState<Hospital[]>([]);
@@ -71,6 +54,7 @@ export function HospitalDetail({
 
   useEffect(() => {
     setDraft(hospital);
+    setCustomNextStep(isCustomNextStepValue(hospital.nextStep));
   }, [hospital]);
 
   useEffect(() => {
@@ -259,8 +243,10 @@ export function HospitalDetail({
             />
           ) : (
             <select value={draft.nextStep} onChange={(event) => selectNextStep(event.target.value)}>
-              {nextStepsFor(draft.stage, draft.substage).map((nextStep) => (
-                <option key={nextStep}>{nextStep}</option>
+              {nextStepChoices(draft.nextStep, draft.stage, draft.substage).map((nextStep) => (
+                <option key={nextStep} value={nextStep}>
+                  {nextStep}
+                </option>
               ))}
             </select>
           )}
@@ -677,8 +663,10 @@ export function NewHospitalDrawer({ onCreate, substageOptions }: { onCreate: (ho
           ) : (
             <select value={draft.nextStep} onChange={(event) => selectNextStep(event.target.value)}>
               <option value="" disabled>Select next step</option>
-              {nextStepsFor(draft.stage, draft.substage).map((nextStep) => (
-                <option key={nextStep}>{nextStep}</option>
+              {nextStepChoices(draft.nextStep, draft.stage, draft.substage).map((nextStep) => (
+                <option key={nextStep} value={nextStep}>
+                  {nextStep}
+                </option>
               ))}
             </select>
           )}

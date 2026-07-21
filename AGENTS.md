@@ -1,5 +1,13 @@
 # Dawn Codex Rules
 
+## Hackathon submission (OpenAI Build Week) — DO NOT MISS
+
+- **Hard deadline:** Tuesday **July 21, 2026, 5:00 PM PT** (= **Wed July 22, 8:00 AM** Singapore UTC+8). No extensions.
+- **Codex session ID for submission:** `019f7a05-eae8-7851-993f-013d83357327` (confirm with `/feedback` in Codex on this repo).
+- **Full checklist:** read `HACKATHON-SUBMISSION.md` before any big new feature work near the deadline.
+- **Agent:** remind Jeremy of unfinished submission items until Devpost shows **Submitted** (green), not draft.
+- **Repo for judges:** https://github.com/jeremylowzhiyancode/dawn — if private, must share with `testing@devpost.com` and `build-week-event@openai.com`.
+
 - Product name: Dawn.
 - Use `https://github.com/jeremylowzhiyancode/dawn` as the canonical GitHub repository URL for Dawn.
 - Default marketing line: Dawn: Hospital Activation Made Clear.
