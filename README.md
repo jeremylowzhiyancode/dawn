@@ -1,4 +1,4 @@
-# Dawn AI — Hospital Activation Made Clear
+# Dawn AI: A New Age for Hospital Activation
 
 **Dawn AI** helps lean health-tech teams track complex, year-long hospital onboarding — from first interest through kickoff, pilot, and active use — without losing the thread when things get messy.
 
