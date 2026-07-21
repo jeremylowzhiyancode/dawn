@@ -60,7 +60,8 @@ This project was built for **OpenAI Build Week**. **Codex** (GPT-5.6) was the pr
 
 ### Where Codex accelerated the workflow
 
-- **Spec-driven start** — We gave Codex our hospital onboarding plan and business context so the product matched real process stages, not a generic task app.  
+- **Spec-driven start** — We gave Codex our hospital onboarding plan and non confidential but relevant business context so the product matched real process stages, not a generic task app.
+- **Plugins** - We used plugins like Build Web Apps, Browser use for looped testing and improvements, Vercel plugins to speed up deployment.
 - **End-to-end implementation** — Codex scaffolded the Next.js app, built the dashboard, drawers, chat panel, file ingest, and `/api/parse` route in rapid iteration sessions.  
 - **Bug fixes under deadline** — Layout overlap (chat vs notepad), hospital names wrongly detected as contacts, decoy rows in CSVs, LOI vs EAA confusion, and TypeScript build errors were diagnosed and fixed with Codex in the same session.  
 - **Demo readiness** — Codex helped trim the demo to reliable paths (CSV + chat), polish copy, and deploy to Vercel with production env vars.  
