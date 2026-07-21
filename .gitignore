@@ -3,6 +3,7 @@ tmp/
 *.log
 node_modules/
 .npm-cache/
+.cursor/
 dawn-scaffold/.next/
 dawn-scaffold/node_modules/
 dawn-scaffold/.env*

@@ -41,8 +41,8 @@ Open http://127.0.0.1:3000
 
 Sample files are in `dawn-scaffold/sample-drops/`:
 
-- `new-hospital-leads-mixed.csv` — drop into Ask Dawn; approve one new hospital and one update  
-- `existing-update-harborview.docx` — optional Harborview LOI update  
+- `new-hospital-leads-mixed.csv` — main demo drop; approve one new hospital and one update  
+- `existing-update-harborview.docx` — Harborview LOI update (includes intentional decoy noise to test parsing)  
 
 ### AI setup (optional for local GPT)
 
@@ -54,7 +54,9 @@ Core flows still work without GPT: priorities use local rules, and CSV parsing h
 
 ## How we built it with Codex and GPT-5.6
 
-This project was built for **OpenAI Build Week**. **Codex** was the primary development partner; **GPT-5.6** powers Ask Dawn chat and file parsing in production.
+This project was built for **OpenAI Build Week**. **Codex** (GPT-5.6) was the primary development partner — spec-driven from our onboarding plan through to deploy.
+
+**Ask Dawn at runtime** uses **GPT-4.1 mini** (via GitHub Models) through `/api/parse` for chat and file parsing. Local rules back up the model when it is offline or unconfigured.
 
 ### Where Codex accelerated the workflow
 
@@ -80,9 +82,9 @@ This project was built for **OpenAI Build Week**. **Codex** was the primary deve
 - **Browser demo data** for the hackathon MVP — no database setup required for judges to run it.  
 - **Deployed on Vercel** at https://dawn-scaffold.vercel.app with AI env vars for live GPT.  
 
-### How GPT-5.6 contributed
+### How GPT-4.1 mini contributed (runtime)
 
-GPT-5.6 (via the `/api/parse` endpoint) handles:
+GPT-4.1 mini (via `/api/parse`) handles:
 
 - **Ask Dawn Q&A** — priorities, hospital lookup, and natural-language updates  
 - **File parsing** — reading messy CSV rows and notes into structured suggestions (hospital, stage, next step, contacts, country)  
@@ -98,7 +100,7 @@ Codex helped translate “idiotproof for a busy team, polished enough for a CEO�
 
 ## Built with
 
-**Codex** · **GPT-5.6** · **Next.js** · **React** · **TypeScript** · **Tailwind CSS** · **Vercel** · Cursor
+**Codex** · **GPT-5.6** *(build)* · **GPT-4.1 mini** *(Ask Dawn)* · **Next.js** · **React** · **TypeScript** · **Tailwind CSS** · **Vercel** · Cursor *(final edits)*
 
 Libraries: `xlsx` (spreadsheets), `jszip` (export), Web Speech API (voice)
 

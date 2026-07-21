@@ -13,7 +13,7 @@ Open http://127.0.0.1:3000
 
 ## Demo files
 
-`sample-drops/new-hospital-leads-mixed.csv` — main file-drop demo
+`sample-drops/new-hospital-leads-mixed.csv` · `existing-update-harborview.docx`
 
 ## Live site
 
