@@ -1,6 +1,6 @@
 # Dawn AI — Hospital Activation Made Clear
 
-**Dawn AI** helps lean health-tech teams track hospital onboarding — from first interest through kickoff, pilot, and active use — without losing the thread when things get messy.
+**Dawn AI** helps lean health-tech teams track complex, year-long hospital onboarding — from first interest through kickoff, pilot, and active use — without losing the thread when things get messy.
 
 - **Live demo:** https://dawn-scaffold.vercel.app  
 - **Demo video:** https://www.youtube.com/watch?v=OcC_V1DlsHA  
